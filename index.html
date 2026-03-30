@@ -326,7 +326,7 @@
 
         }, [imageObj, camera, lens, brandText, subBrandText, outputSize, overlayType, fontFamily, eventName, venueName, seating]);
 
-        const downloadImage = () => {
+            const downloadImage = () => {
                 if (!canvasRef.current) return;
                 const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95);
                 const link = document.createElement('a');
@@ -336,9 +336,9 @@
             };
 
             return (
-                <div className="min-h-screen p-4 md:p-8 max-w-[1400px] mx-auto flex flex-col md:flex-row gap-8">
+                <div className="min-h-screen p-3 sm:p-4 lg:p-8 max-w-[1400px] mx-auto flex flex-col lg:flex-row gap-6 lg:gap-8">
                     {/* Control Panel */}
-                    <div className="w-full md:w-1/3 xl:w-1/4 bg-gray-800 p-6 rounded-xl shadow-2xl border border-gray-700 h-fit max-h-[95vh] overflow-y-auto">
+                    <div className="w-full lg:w-1/3 xl:w-1/4 bg-gray-800 p-5 lg:p-6 rounded-xl shadow-2xl border border-gray-700 h-fit lg:max-h-[95vh] lg:overflow-y-auto">
                         <h1 className="text-2xl font-bold mb-6 text-blue-400">Photo Watermark Tool</h1>
                         
                         <div className="space-y-6">
@@ -467,7 +467,7 @@
                                             className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                         />
                                     </div>
-                                    <div className="flex gap-3">
+                                    <div className="flex flex-col sm:flex-row gap-3">
                                         <div className="flex-1">
                                             <label className="block text-xs text-gray-400 mb-1">Venue Name</label>
                                             <input 
@@ -503,19 +503,19 @@
                     </div>
 
                     {/* Preview Panel */}
-                    <div className="w-full md:w-2/3 xl:w-3/4 flex flex-col items-center">
+                    <div className="w-full lg:w-2/3 xl:w-3/4 flex flex-col items-center">
                         <div className="w-full text-center mb-2 text-gray-400">
                             Live Preview 
                         </div>
                         
                         {/* Canvas Container with Checkerboard Background */}
-                        <div className="canvas-container w-full rounded-xl overflow-hidden shadow-2xl flex items-center justify-center min-h-[500px] border border-gray-700 relative">
+                        <div className="canvas-container w-full rounded-xl overflow-hidden shadow-2xl flex items-center justify-center min-h-[350px] lg:min-h-[500px] border border-gray-700 relative">
                             {!imageObj && (
-                                <p className="text-gray-500 italic absolute">Upload an image to see the preview</p>
+                                <p className="text-gray-500 italic absolute px-4 text-center">Upload an image to see the preview</p>
                             )}
                             <canvas 
                                 ref={canvasRef} 
-                                className="max-w-full max-h-[85vh] object-contain shadow-2xl"
+                                className="max-w-full max-h-[60vh] lg:max-h-[85vh] object-contain shadow-2xl"
                                 style={{ display: imageObj ? 'block' : 'none' }}
                             />
                         </div>
