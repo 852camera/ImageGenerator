@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Equipment Watermark</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Google Fonts for Typography Choices -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:wght@400;600;700&family=Montserrat:wght@400;600;700&family=Noto+Sans+TC:wght@400;700&family=Noto+Serif+TC:wght@400;700&family=Oswald:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: sans-serif; background-color: #111827; color: white; }
+        .canvas-container {
+            background: #1f2937;
+            background-image: linear-gradient(45deg, #374151 25%, transparent 25%), 
+                              linear-gradient(-45deg, #374151 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #374151 75%), 
+                              linear-gradient(-45deg, transparent 75%, #374151 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Helper to draw a decorative compass on the canvas
+        const drawCompass = (ctx, x, y, size, fontFamily) => {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = size * 0.01;
+
+            // Outer and inner circles
+            ctx.beginPath();
+            ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, size / 2.2, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(0, 0, size / 6, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Star points
+            ctx.beginPath();
+            ctx.moveTo(0, -size/2); // Top
+            ctx.lineTo(size/12, -size/6);
+            ctx.lineTo(size/2, 0);  // Right
+            ctx.lineTo(size/12, size/6);
+            ctx.lineTo(0, size/2);  // Bottom
+            ctx.lineTo(-size/12, size/6);
+            ctx.lineTo(-size/2, 0); // Left
+            ctx.lineTo(-size/12, -size/6);
+            ctx.closePath();
+            ctx.stroke();
+
+            // Diagonal lines
+            ctx.beginPath();
+            ctx.moveTo(-size/2.5, -size/2.5);
+            ctx.lineTo(size/2.5, size/2.5);
+            ctx.moveTo(size/2.5, -size/2.5);
+            ctx.lineTo(-size/2.5, size/2.5);
+            ctx.stroke();
+
+            // Text
+            ctx.font = `${size * 0.15}px ${fontFamily}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('N', 0, -size/1.7);
+            ctx.fillText('W', -size/1.7, 0);
+
+            ctx.restore();
+        };
+
+        // Helper to draw a decorative film strip on the canvas
+        const drawFilmStrip = (ctx, x, y, size) => {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(-Math.PI / 12); // Tilt slightly
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            
+            // Draw curved paths for the film edges
+            ctx.beginPath();
+            ctx.moveTo(-size, -size * 0.2);
+            ctx.quadraticCurveTo(0, 0, size, size * 0.4);
+            ctx.lineWidth = size * 0.04;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(-size, size * 0.2);
+            ctx.quadraticCurveTo(0, size * 0.4, size, size * 0.8);
+            ctx.lineWidth = size * 0.04;
+            ctx.stroke();
+
+            // Draw center film area
+            ctx.beginPath();
+            ctx.moveTo(-size, 0);
+            ctx.quadraticCurveTo(0, size * 0.2, size, size * 0.6);
+            ctx.lineWidth = size * 0.35;
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.stroke();
+
+            // Draw holes along the edges
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = size * 0.02;
+            ctx.setLineDash([size * 0.03, size * 0.05]);
+            
+            ctx.beginPath();
+            ctx.moveTo(-size, -size * 0.1);
+            ctx.quadraticCurveTo(0, 0.1, size, size * 0.5);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(-size, size * 0.1);
+            ctx.quadraticCurveTo(0, size * 0.3, size, size * 0.7);
+            ctx.stroke();
+
+            ctx.restore();
+        };
+
+        const App = () => {
+            const [imageSrc, setImageSrc] = useState(null);
+            const [imageObj, setImageObj] = useState(null);
+            
+            // New UI states
+            const [outputSize, setOutputSize] = useState('ig'); // 'ig' or 'original'
+            const [overlayType, setOverlayType] = useState('both');
+            const [fontFamily, setFontFamily] = useState("'Noto Serif TC', serif");
+
+            // Text content states
+            const [camera, setCamera] = useState('Canon R5');
+            const [lens, setLens] = useState('RF 100-500mm');
+            const [brandText, setBrandText] = useState('@ 852 CAMERA');
+            const [subBrandText, setSubBrandText] = useState('PROFESSIONAL RENTAL');
+            
+            // Event details states
+            const [eventName, setEventName] = useState('');
+            const [venueName, setVenueName] = useState('');
+            const [seating, setSeating] = useState('');
+
+            const canvasRef = useRef(null);
+
+            // Handle file upload
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        setImageSrc(event.target.result);
+                        const img = new Image();
+                        img.onload = () => setImageObj(img);
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            // Redraw canvas whenever inputs or image changes
+            useEffect(() => {
+                if (!imageObj || !canvasRef.current) return;
+
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                
+                let w, h;
+
+                // 1. Determine Canvas Size
+                if (outputSize === 'ig') {
+                    canvas.width = 1080;
+                    canvas.height = 1350;
+                    w = 1080;
+                    h = 1350;
+                } else {
+                    canvas.width = imageObj.width;
+                    canvas.height = imageObj.height;
+                    w = canvas.width;
+                    h = canvas.height;
+                }
+
+                // Clear canvas before drawing
+                ctx.clearRect(0, 0, w, h);
+
+                // 2. Draw Image (with or without blurred background)
+                if (outputSize === 'ig') {
+                    // --- Draw Blurred Background ---
+                    // Calculate scale to fill the canvas completely
+                    const scaleFill = Math.max(w / imageObj.width, h / imageObj.height);
+                    const fillW = imageObj.width * scaleFill;
+                    const fillH = imageObj.height * scaleFill;
+                    const fillX = (w - fillW) / 2;
+                    const fillY = (h - fillH) / 2;
+
+                    ctx.filter = 'blur(40px) brightness(0.6)'; // Heavy blur + darken slightly
+                    ctx.drawImage(imageObj, fillX, fillY, fillW, fillH);
+                    ctx.filter = 'none'; // Reset filter
+
+                    // --- Draw Fitted Image in center ---
+                    // Calculate scale to fit inside the canvas
+                    const scaleFit = Math.min(w / imageObj.width, h / imageObj.height);
+                    const fitW = imageObj.width * scaleFit;
+                    const fitH = imageObj.height * scaleFit;
+                    const fitX = (w - fitW) / 2;
+                    const fitY = (h - fitH) / 2;
+                    
+                    // Add subtle shadow to separate image from blurred background
+                    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+                    ctx.shadowBlur = 30;
+                    ctx.drawImage(imageObj, fitX, fitY, fitW, fitH);
+                    
+                    // Reset shadow for upcoming gradient/text
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                } else {
+                    // Original layout: just draw image filling the canvas
+                ctx.drawImage(imageObj, 0, 0, w, h);
+            }
+
+            // 3. Draw dark gradient at the bottom for text readability
+            const grad = ctx.createLinearGradient(0, h * 0.60, 0, h);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(0.5, 'rgba(0,0,0,0.6)');
+            grad.addColorStop(1, 'rgba(0,0,0,0.95)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, h * 0.5, w, h * 0.5);
+
+            // Draw top gradient if event details exist
+            if (eventName || venueName || seating) {
+                const topGrad = ctx.createLinearGradient(0, 0, 0, h * 0.3);
+                topGrad.addColorStop(0, 'rgba(0,0,0,0.85)');
+                topGrad.addColorStop(0.6, 'rgba(0,0,0,0.3)');
+                topGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = topGrad;
+                ctx.fillRect(0, 0, w, h * 0.3);
+            }
+
+            // 4. Draw decorative graphics (if selected)
+            if (overlayType === 'both' || overlayType === 'film') {
+                drawFilmStrip(ctx, w * 0.12, h * 0.90, w * 0.15);
+            }
+            if (overlayType === 'both' || overlayType === 'compass') {
+                drawCompass(ctx, w * 0.88, h * 0.90, w * 0.16, fontFamily);
+            }
+
+            // 5. Draw horizontal divider line (moved up and pushed inwards)
+            const lineY = h - w * 0.16;
+            const marginX = w * 0.1;
+            
+            ctx.beginPath();
+            ctx.moveTo(marginX, lineY);
+            ctx.lineTo(w - marginX, lineY);
+            
+            const lineGrad = ctx.createLinearGradient(marginX, 0, w - marginX, 0);
+            lineGrad.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
+            lineGrad.addColorStop(0.1, 'rgba(255, 255, 255, 0.6)');
+            lineGrad.addColorStop(0.9, 'rgba(255, 255, 255, 0.6)');
+            lineGrad.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
+            
+            ctx.strokeStyle = lineGrad;
+            ctx.lineWidth = w * 0.002;
+            ctx.stroke();
+
+            // 6. Draw Text
+            ctx.fillStyle = 'white';
+            ctx.shadowColor = 'rgba(0,0,0,0.8)';
+            ctx.shadowBlur = w * 0.008;
+
+            // --- Top Event Details ---
+            if (eventName || venueName || seating) {
+                ctx.textAlign = 'right';
+                let currentTopY = w * 0.1;
+                
+                if (eventName) {
+                    ctx.font = `600 ${w * 0.035}px ${fontFamily}`;
+                    ctx.fillText(eventName, w - marginX, currentTopY);
+                    currentTopY += w * 0.045;
+                }
+                
+                if (venueName || seating) {
+                    ctx.font = `400 ${w * 0.022}px ${fontFamily}`;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                    const locationText = [venueName, seating].filter(Boolean).join(' | ');
+                    ctx.fillText(locationText, w - marginX, currentTopY);
+                    // Reset color for next sections
+                    ctx.fillStyle = 'white';
+                }
+            }
+
+            // --- Left Side (Equipment Details) ---
+            ctx.textAlign = 'left';
+            
+            ctx.font = `600 ${w * 0.038}px ${fontFamily}`;
+            ctx.fillText('拍攝器材', marginX, lineY - w * 0.025);
+
+            ctx.font = `${w * 0.028}px ${fontFamily}`;
+            if ('letterSpacing' in ctx) ctx.letterSpacing = `${w * 0.002}px`;
+            ctx.fillText(`相機 : ${camera}`, marginX, lineY + w * 0.05);
+            ctx.fillText(`鏡頭 : ${lens}`, marginX, lineY + w * 0.09);
+
+            // --- Right Side (Branding) ---
+            ctx.textAlign = 'right';
+            
+            if ('letterSpacing' in ctx) ctx.letterSpacing = `0px`;
+            ctx.font = `600 ${w * 0.042}px ${fontFamily}`;
+            ctx.fillText(brandText, w - marginX, lineY + w * 0.05);
+
+            if ('letterSpacing' in ctx) ctx.letterSpacing = `${w * 0.008}px`;
+            ctx.font = `${w * 0.018}px sans-serif`;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.fillText(subBrandText, w - marginX, lineY + w * 0.085);
+
+            if ('letterSpacing' in ctx) ctx.letterSpacing = `0px`;
+
+        }, [imageObj, camera, lens, brandText, subBrandText, outputSize, overlayType, fontFamily, eventName, venueName, seating]);
+
+        const downloadImage = () => {
+                if (!canvasRef.current) return;
+                const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95);
+                const link = document.createElement('a');
+                link.download = 'watermarked_photo.jpg';
+                link.href = dataUrl;
+                link.click();
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8 max-w-[1400px] mx-auto flex flex-col md:flex-row gap-8">
+                    {/* Control Panel */}
+                    <div className="w-full md:w-1/3 xl:w-1/4 bg-gray-800 p-6 rounded-xl shadow-2xl border border-gray-700 h-fit max-h-[95vh] overflow-y-auto">
+                        <h1 className="text-2xl font-bold mb-6 text-blue-400">Photo Watermark Tool</h1>
+                        
+                        <div className="space-y-6">
+                            {/* SECTION 1 */}
+                            <div>
+                                <h2 className="text-lg font-semibold text-white mb-3">1. Image & Layout</h2>
+                                <div className="space-y-4">
+                                    <div>
+                                        <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            onChange={handleImageUpload}
+                                            className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 transition cursor-pointer"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Export Size</label>
+                                        <select 
+                                            value={outputSize} 
+                                            onChange={(e) => setOutputSize(e.target.value)}
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        >
+                                            <option value="ig">Instagram Portrait (1080x1350)</option>
+                                            <option value="original">Original Image Size</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr className="border-gray-700" />
+
+                            {/* SECTION 2 */}
+                            <div>
+                                <h2 className="text-lg font-semibold text-white mb-3">2. Styling</h2>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Typography Font</label>
+                                        <select 
+                                            value={fontFamily} 
+                                            onChange={(e) => setFontFamily(e.target.value)}
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        >
+                                            <option value="'Noto Serif TC', serif">Noto Serif (Classic)</option>
+                                            <option value="'Noto Sans TC', sans-serif">Noto Sans (Modern)</option>
+                                            <option value="'Cormorant Garamond', serif">Cormorant Garamond (Elegant)</option>
+                                            <option value="'Playfair Display', serif">Playfair Display (Editorial)</option>
+                                            <option value="'Cinzel', serif">Cinzel (Cinematic)</option>
+                                            <option value="'Montserrat', sans-serif">Montserrat (Clean)</option>
+                                            <option value="'Oswald', sans-serif">Oswald (Bold)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Graphic Overlays</label>
+                                        <select 
+                                            value={overlayType} 
+                                            onChange={(e) => setOverlayType(e.target.value)}
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        >
+                                            <option value="both">Compass & Film Strip</option>
+                                            <option value="compass">Compass Only</option>
+                                            <option value="film">Film Strip Only</option>
+                                            <option value="none">None (Clean)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr className="border-gray-700" />
+
+                            {/* SECTION 3 */}
+                            <div>
+                                <h2 className="text-lg font-semibold text-white mb-3">3. Text Content</h2>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Camera (相機)</label>
+                                        <input 
+                                            type="text" 
+                                            value={camera} 
+                                            onChange={(e) => setCamera(e.target.value)}
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Lens (鏡頭)</label>
+                                        <input 
+                                            type="text" 
+                                            value={lens} 
+                                            onChange={(e) => setLens(e.target.value)}
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Brand Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={brandText} 
+                                            onChange={(e) => setBrandText(e.target.value)}
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Sub Title</label>
+                                        <input 
+                                            type="text" 
+                                            value={subBrandText} 
+                                            onChange={(e) => setSubBrandText(e.target.value)}
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr className="border-gray-700" />
+
+                            {/* SECTION 4 */}
+                            <div>
+                                <h2 className="text-lg font-semibold text-white mb-3">4. Event Details (Optional)</h2>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Event Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={eventName} 
+                                            onChange={(e) => setEventName(e.target.value)}
+                                            placeholder="e.g., Live Concert 2026"
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <div className="flex-1">
+                                            <label className="block text-xs text-gray-400 mb-1">Venue Name</label>
+                                            <input 
+                                                type="text" 
+                                                value={venueName} 
+                                                onChange={(e) => setVenueName(e.target.value)}
+                                                placeholder="e.g., AsiaWorld-Arena"
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-xs text-gray-400 mb-1">Seating</label>
+                                            <input 
+                                                type="text" 
+                                                value={seating} 
+                                                onChange={(e) => setSeating(e.target.value)}
+                                                placeholder="e.g., Block A, Row 5"
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={downloadImage}
+                                disabled={!imageObj}
+                                className={`w-full py-3 mt-4 rounded-md font-bold text-lg transition ${imageObj ? 'bg-green-600 hover:bg-green-500 text-white cursor-pointer shadow-lg' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
+                            >
+                                Export & Download
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Preview Panel */}
+                    <div className="w-full md:w-2/3 xl:w-3/4 flex flex-col items-center">
+                        <div className="w-full text-center mb-2 text-gray-400">
+                            Live Preview 
+                        </div>
+                        
+                        {/* Canvas Container with Checkerboard Background */}
+                        <div className="canvas-container w-full rounded-xl overflow-hidden shadow-2xl flex items-center justify-center min-h-[500px] border border-gray-700 relative">
+                            {!imageObj && (
+                                <p className="text-gray-500 italic absolute">Upload an image to see the preview</p>
+                            )}
+                            <canvas 
+                                ref={canvasRef} 
+                                className="max-w-full max-h-[85vh] object-contain shadow-2xl"
+                                style={{ display: imageObj ? 'block' : 'none' }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
