@@ -37,6 +37,11 @@
             // Image states
             const [imageObj, setImageObj] = useState(null);
             const [logoObj, setLogoObj] = useState(null);
+            const [seatingPlanObj, setSeatingPlanObj] = useState(null);
+            const [seatingPlanSrc, setSeatingPlanSrc] = useState(null);
+            
+            // Interaction states
+            const [pinPosition, setPinPosition] = useState(null);
             
             // UI states
             const [outputSize, setOutputSize] = useState('ig');
@@ -56,7 +61,7 @@
                 const img = new Image();
                 img.onload = () => setLogoObj(img);
                 // Ensure your logo image is named 'logo.png' and placed in the same folder
-                img.src = 'logo.jpg'; 
+                img.src = 'logo.png'; 
             }, []);
 
             // Handle main image upload
@@ -73,18 +78,33 @@
                 }
             };
 
-            // Handle logo upload
-            const handleLogoUpload = (e) => {
+            // Handle seating plan upload
+            const handleSeatingPlanUpload = (e) => {
                 const file = e.target.files[0];
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (event) => {
+                        setSeatingPlanSrc(event.target.result);
                         const img = new Image();
-                        img.onload = () => setLogoObj(img);
+                        img.onload = () => setSeatingPlanObj(img);
                         img.src = event.target.result;
                     };
                     reader.readAsDataURL(file);
                 }
+            };
+
+            // Handle pin dropping on the seating plan
+            const handleSeatingPlanClick = (e) => {
+                const rect = e.target.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / rect.width;
+                const y = (e.clientY - rect.top) / rect.height;
+                setPinPosition({ x, y });
+            };
+
+            const clearSeatingPlan = () => {
+                setSeatingPlanObj(null);
+                setSeatingPlanSrc(null);
+                setPinPosition(null);
             };
 
             // Redraw canvas whenever inputs or image changes
@@ -203,7 +223,7 @@
                     ctx.fillText(optionalText, imgX + textMarginX, currentY);
                 }
 
-                // Reset shadow before drawing logo
+                // Reset shadow before drawing images
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
                 ctx.shadowOffsetX = 0;
@@ -238,7 +258,62 @@
                     ctx.shadowBlur = 0;
                 }
 
-            }, [imageObj, logoObj, camera, lens, locationText, optionalText, outputSize, fontFamily, fontScale]);
+                // 7. Draw Seating Plan (Bottom Right)
+                if (seatingPlanObj) {
+                    const spMaxW = imgW * 0.25; // Max width is 25% of image width
+                    const spMaxH = imgH * 0.20; // Max height is 20% of image height
+                    
+                    let spW = seatingPlanObj.width;
+                    let spH = seatingPlanObj.height;
+                    
+                    // Scale proportionally
+                    const spScale = Math.min(spMaxW / spW, spMaxH / spH);
+                    spW = spW * spScale;
+                    spH = spH * spScale;
+
+                    // Position in bottom right, aligned with text padding
+                    const spX = imgX + imgW - spW - textMarginX;
+                    const spY = imgY + imgH - spH - paddingY; 
+
+                    // Draw image with a clean border
+                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                    ctx.shadowBlur = imgW * 0.008;
+                    ctx.lineWidth = imgW * 0.002;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; // White border
+                    
+                    ctx.drawImage(seatingPlanObj, spX, spY, spW, spH);
+                    ctx.strokeRect(spX, spY, spW, spH);
+                    
+                    // Draw Interactive Pin
+                    if (pinPosition) {
+                        const pinX = spX + (pinPosition.x * spW);
+                        const pinY = spY + (pinPosition.y * spH);
+                        
+                        // Inner red circle
+                        ctx.beginPath();
+                        ctx.arc(pinX, pinY, imgW * 0.006, 0, 2 * Math.PI);
+                        ctx.fillStyle = '#ef4444'; // Tailwind Red 500
+                        ctx.fill();
+                        
+                        // White border
+                        ctx.lineWidth = imgW * 0.002;
+                        ctx.strokeStyle = 'white';
+                        ctx.stroke();
+
+                        // Pulsing outer ring
+                        ctx.beginPath();
+                        ctx.arc(pinX, pinY, imgW * 0.012, 0, 2 * Math.PI);
+                        ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+                        ctx.lineWidth = imgW * 0.002;
+                        ctx.stroke();
+                    }
+                    
+                    // Reset shadows
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                }
+
+            }, [imageObj, logoObj, seatingPlanObj, pinPosition, camera, lens, locationText, optionalText, outputSize, fontFamily, fontScale]);
 
             const downloadImage = () => {
                 if (!canvasRef.current) return;
@@ -354,6 +429,55 @@
                                             className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                         />
                                     </div>
+                                </div>
+                            </div>
+
+                            <hr className="border-gray-700" />
+
+                            {/* SECTION 3: Seating Plan */}
+                            <div>
+                                <h2 className="text-lg font-semibold text-white mb-3">3. Seating Plan (Optional)</h2>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Upload Seating Plan</label>
+                                        <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            onChange={handleSeatingPlanUpload}
+                                            className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 transition cursor-pointer"
+                                        />
+                                    </div>
+                                    {seatingPlanSrc && (
+                                        <div className="bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
+                                            <label className="block text-xs font-semibold text-gray-300 mb-2">
+                                                Tap / Click to drop a pin on the seat
+                                            </label>
+                                            <div className="relative inline-block border border-gray-600 bg-black rounded overflow-hidden">
+                                                <img 
+                                                    src={seatingPlanSrc} 
+                                                    alt="Seating Plan" 
+                                                    className="max-h-48 max-w-full cursor-crosshair object-contain" 
+                                                    onClick={handleSeatingPlanClick}
+                                                />
+                                                {pinPosition && (
+                                                    <div 
+                                                        className="absolute w-3 h-3 bg-red-500 rounded-full border border-white shadow-md pointer-events-none"
+                                                        style={{
+                                                            left: `${pinPosition.x * 100}%`,
+                                                            top: `${pinPosition.y * 100}%`,
+                                                            transform: 'translate(-50%, -50%)'
+                                                        }}
+                                                    />
+                                                )}
+                                            </div>
+                                            <button 
+                                                onClick={clearSeatingPlan} 
+                                                className="text-xs text-red-400 mt-3 block w-full hover:text-red-300 transition"
+                                            >
+                                                Remove Seating Plan
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
