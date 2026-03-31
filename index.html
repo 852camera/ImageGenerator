@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo Equipment Watermark</title>
+    <title>Photo Watermark Studio</title>
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & ReactDOM -->
@@ -11,8 +11,8 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Google Fonts for Typography Choices -->
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:wght@400;600;700&family=Montserrat:wght@400;600;700&family=Noto+Sans+TC:wght@400;700&family=Noto+Serif+TC:wght@400;700&family=Oswald:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <!-- Google Fonts for Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,700;0,900;1,900&family=Noto+Sans+TC:wght@400;700;900&family=Noto+Serif+TC:wght@400;700;900&display=swap" rel="stylesheet">
     
     <style>
         body { font-family: sans-serif; background-color: #111827; color: white; }
@@ -33,136 +33,54 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // Helper to draw a decorative compass on the canvas
-        const drawCompass = (ctx, x, y, size, fontFamily) => {
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-            ctx.lineWidth = size * 0.01;
-
-            // Outer and inner circles
-            ctx.beginPath();
-            ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.arc(0, 0, size / 2.2, 0, Math.PI * 2);
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(0, 0, size / 6, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Star points
-            ctx.beginPath();
-            ctx.moveTo(0, -size/2); // Top
-            ctx.lineTo(size/12, -size/6);
-            ctx.lineTo(size/2, 0);  // Right
-            ctx.lineTo(size/12, size/6);
-            ctx.lineTo(0, size/2);  // Bottom
-            ctx.lineTo(-size/12, size/6);
-            ctx.lineTo(-size/2, 0); // Left
-            ctx.lineTo(-size/12, -size/6);
-            ctx.closePath();
-            ctx.stroke();
-
-            // Diagonal lines
-            ctx.beginPath();
-            ctx.moveTo(-size/2.5, -size/2.5);
-            ctx.lineTo(size/2.5, size/2.5);
-            ctx.moveTo(size/2.5, -size/2.5);
-            ctx.lineTo(-size/2.5, size/2.5);
-            ctx.stroke();
-
-            // Text
-            ctx.font = `${size * 0.15}px ${fontFamily}`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('N', 0, -size/1.7);
-            ctx.fillText('W', -size/1.7, 0);
-
-            ctx.restore();
-        };
-
-        // Helper to draw a decorative film strip on the canvas
-        const drawFilmStrip = (ctx, x, y, size) => {
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(-Math.PI / 12); // Tilt slightly
-            
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-            
-            // Draw curved paths for the film edges
-            ctx.beginPath();
-            ctx.moveTo(-size, -size * 0.2);
-            ctx.quadraticCurveTo(0, 0, size, size * 0.4);
-            ctx.lineWidth = size * 0.04;
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.moveTo(-size, size * 0.2);
-            ctx.quadraticCurveTo(0, size * 0.4, size, size * 0.8);
-            ctx.lineWidth = size * 0.04;
-            ctx.stroke();
-
-            // Draw center film area
-            ctx.beginPath();
-            ctx.moveTo(-size, 0);
-            ctx.quadraticCurveTo(0, size * 0.2, size, size * 0.6);
-            ctx.lineWidth = size * 0.35;
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.stroke();
-
-            // Draw holes along the edges
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-            ctx.lineWidth = size * 0.02;
-            ctx.setLineDash([size * 0.03, size * 0.05]);
-            
-            ctx.beginPath();
-            ctx.moveTo(-size, -size * 0.1);
-            ctx.quadraticCurveTo(0, 0.1, size, size * 0.5);
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.moveTo(-size, size * 0.1);
-            ctx.quadraticCurveTo(0, size * 0.3, size, size * 0.7);
-            ctx.stroke();
-
-            ctx.restore();
-        };
-
         const App = () => {
-            const [imageSrc, setImageSrc] = useState(null);
+            // Image states
             const [imageObj, setImageObj] = useState(null);
+            const [logoObj, setLogoObj] = useState(null);
             
-            // New UI states
-            const [outputSize, setOutputSize] = useState('ig'); // 'ig' or 'original'
-            const [overlayType, setOverlayType] = useState('both');
-            const [fontFamily, setFontFamily] = useState("'Noto Serif TC', serif");
+            // UI states
+            const [outputSize, setOutputSize] = useState('ig');
+            const [fontFamily, setFontFamily] = useState("'Noto Sans TC', sans-serif");
+            const [fontScale, setFontScale] = useState(1);
 
             // Text content states
-            const [camera, setCamera] = useState('Canon R5');
-            const [lens, setLens] = useState('RF 100-500mm');
-            const [brandText, setBrandText] = useState('@ 852 CAMERA');
-            const [subBrandText, setSubBrandText] = useState('PROFESSIONAL RENTAL');
-            
-            // Event details states
-            const [eventName, setEventName] = useState('');
-            const [venueName, setVenueName] = useState('');
-            const [seating, setSeating] = useState('');
+            const [camera, setCamera] = useState('Canon R7');
+            const [lens, setLens] = useState('RF100500');
+            const [locationText, setLocationText] = useState('Kai Tak Arena Block A Row');
+            const [optionalText, setOptionalText] = useState('');
 
             const canvasRef = useRef(null);
 
-            // Handle file upload
+            // Load hardcoded logo on initial render
+            useEffect(() => {
+                const img = new Image();
+                img.onload = () => setLogoObj(img);
+                // Ensure your logo image is named 'logo.png' and placed in the same folder
+                img.src = 'logo.png'; 
+            }, []);
+
+            // Handle main image upload
             const handleImageUpload = (e) => {
                 const file = e.target.files[0];
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (event) => {
-                        setImageSrc(event.target.result);
                         const img = new Image();
                         img.onload = () => setImageObj(img);
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            // Handle logo upload
+            const handleLogoUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => setLogoObj(img);
                         img.src = event.target.result;
                     };
                     reader.readAsDataURL(file);
@@ -177,6 +95,7 @@
                 const ctx = canvas.getContext('2d');
                 
                 let w, h;
+                let imgX = 0, imgY = 0, imgW, imgH;
 
                 // 1. Determine Canvas Size
                 if (outputSize === 'ig') {
@@ -191,140 +110,135 @@
                     h = canvas.height;
                 }
 
+                // Default image bounds to full canvas
+                imgW = w;
+                imgH = h;
+
                 // Clear canvas before drawing
                 ctx.clearRect(0, 0, w, h);
 
-                // 2. Draw Image (with or without blurred background)
+                // 2. Draw Image (with or without border)
                 if (outputSize === 'ig') {
-                    // --- Draw Blurred Background ---
-                    // Calculate scale to fill the canvas completely
-                    const scaleFill = Math.max(w / imageObj.width, h / imageObj.height);
-                    const fillW = imageObj.width * scaleFill;
-                    const fillH = imageObj.height * scaleFill;
-                    const fillX = (w - fillW) / 2;
-                    const fillY = (h - fillH) / 2;
-
-                    ctx.filter = 'blur(100px) brightness(0.5)'; // Heavier blur + darkened
-                    ctx.drawImage(imageObj, fillX, fillY, fillW, fillH);
-                    ctx.filter = 'none'; // Reset filter
+                    // --- Draw White Background Border ---
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, w, h);
 
                     // --- Draw Fitted Image in center ---
-                    // Calculate scale to fit inside the canvas
                     const scaleFit = Math.min(w / imageObj.width, h / imageObj.height);
-                    const fitW = imageObj.width * scaleFit;
-                    const fitH = imageObj.height * scaleFit;
-                    const fitX = (w - fitW) / 2;
-                    const fitY = (h - fitH) / 2;
+                    imgW = imageObj.width * scaleFit;
+                    imgH = imageObj.height * scaleFit;
+                    imgX = (w - imgW) / 2;
+                    imgY = (h - imgH) / 2;
                     
-                    // Add subtle shadow to separate image from blurred background
-                    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+                    // Add clean subtle shadow against the white background
+                    ctx.shadowColor = 'rgba(0,0,0,0.15)';
                     ctx.shadowBlur = 30;
-                    ctx.drawImage(imageObj, fitX, fitY, fitW, fitH);
+                    ctx.drawImage(imageObj, imgX, imgY, imgW, imgH);
                     
-                    // Reset shadow for upcoming gradient/text
+                    // Reset shadow
                     ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
                 } else {
                     // Original layout: just draw image filling the canvas
-                ctx.drawImage(imageObj, 0, 0, w, h);
-            }
+                    ctx.drawImage(imageObj, 0, 0, w, h);
+                }
 
-            // 3. Draw dark gradient at the bottom for text readability
-            const grad = ctx.createLinearGradient(0, h * 0.60, 0, h);
-            grad.addColorStop(0, 'rgba(0,0,0,0)');
-            grad.addColorStop(0.5, 'rgba(0,0,0,0.6)');
-            grad.addColorStop(1, 'rgba(0,0,0,0.95)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, h * 0.5, w, h * 0.5);
-
-            // Draw top gradient if event details exist
-            if (eventName || venueName || seating) {
-                const topGrad = ctx.createLinearGradient(0, 0, 0, h * 0.3);
-                topGrad.addColorStop(0, 'rgba(0,0,0,0.85)');
-                topGrad.addColorStop(0.6, 'rgba(0,0,0,0.3)');
-                topGrad.addColorStop(1, 'rgba(0,0,0,0)');
-                ctx.fillStyle = topGrad;
-                ctx.fillRect(0, 0, w, h * 0.3);
-            }
-
-            // 4. Draw decorative graphics (if selected)
-            if (overlayType === 'both' || overlayType === 'film') {
-                drawFilmStrip(ctx, w * 0.12, h * 0.90, w * 0.15);
-            }
-            if (overlayType === 'both' || overlayType === 'compass') {
-                drawCompass(ctx, w * 0.88, h * 0.90, w * 0.16, fontFamily);
-            }
-
-            // 5. Draw horizontal divider line (moved up and pushed inwards)
-            const lineY = h - w * 0.16;
-            const marginX = w * 0.1;
-            
-            ctx.beginPath();
-            ctx.moveTo(marginX, lineY);
-            ctx.lineTo(w - marginX, lineY);
-            
-            const lineGrad = ctx.createLinearGradient(marginX, 0, w - marginX, 0);
-            lineGrad.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
-            lineGrad.addColorStop(0.1, 'rgba(255, 255, 255, 0.6)');
-            lineGrad.addColorStop(0.9, 'rgba(255, 255, 255, 0.6)');
-            lineGrad.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
-            
-            ctx.strokeStyle = lineGrad;
-            ctx.lineWidth = w * 0.002;
-            ctx.stroke();
-
-            // 6. Draw Text
-            ctx.fillStyle = 'white';
-            ctx.shadowColor = 'rgba(0,0,0,0.8)';
-            ctx.shadowBlur = w * 0.008;
-
-            // --- Top Event Details ---
-            if (eventName || venueName || seating) {
-                ctx.textAlign = 'right';
-                let currentTopY = w * 0.1;
+                // 3. Setup Text Scaling & Dimensions
+                const textMarginX = imgW * 0.025; // Tight left spacing
                 
-                if (eventName) {
-                    ctx.font = `600 ${w * 0.035}px ${fontFamily}`;
-                    ctx.fillText(eventName, w - marginX, currentTopY);
-                    currentTopY += w * 0.045;
+                // Scaled Font Sizes
+                const primaryFontSize = imgW * 0.036 * fontScale;
+                const secondaryFontSize = imgW * 0.028 * fontScale;
+
+                // Calculate dynamic bar height based on text
+                const lineSpacing = imgW * 0.01 * fontScale;
+                const totalTextHeight = primaryFontSize + secondaryFontSize + (optionalText ? secondaryFontSize + lineSpacing : 0) + lineSpacing;
+                const paddingY = imgW * 0.02 * fontScale; // Tighter vertical padding
+                
+                const barHeight = totalTextHeight + paddingY * 2;
+                const barY = imgY + imgH - barHeight;
+
+                // 4. Draw Bottom Overlay Bar (Smooth Gradient)
+                // Stretch gradient across the full width, keeping it obvious at 75%
+                const barGrad = ctx.createLinearGradient(imgX, barY, imgX + imgW, barY);
+                barGrad.addColorStop(0, '#0F305D'); 
+                barGrad.addColorStop(0.6, 'rgba(15, 48, 93, 0.9)');  // Hold strong blue past the middle
+                barGrad.addColorStop(0.75, 'rgba(15, 48, 93, 0.6)'); // Still very visible at 75%
+                barGrad.addColorStop(0.95, 'rgba(15, 48, 93, 0)');   // Fade out completely near the right edge
+                
+                ctx.fillStyle = barGrad;
+                ctx.fillRect(imgX, barY, imgW, barHeight);
+
+                // 5. Draw Text Elements
+                ctx.shadowColor = 'rgba(0,0,0,0.7)';
+                ctx.shadowBlur = imgW * 0.005;
+                ctx.shadowOffsetX = imgW * 0.001;
+                ctx.shadowOffsetY = imgW * 0.001;
+
+                // --- Bottom Left: Equipment, Location & Optional Text ---
+                ctx.textAlign = 'left';
+                let currentY = barY + paddingY + primaryFontSize * 0.85; // Start near the top of the bar
+                
+                // Line 1: Equipment
+                ctx.font = `900 ${primaryFontSize}px ${fontFamily}`; // Extra bold
+                ctx.fillStyle = 'white';
+
+                let equipmentText = '拍攝器材 : ';
+                if (camera && lens) {
+                    equipmentText += `${camera} + ${lens}`;
+                } else if (camera || lens) {
+                    equipmentText += camera || lens;
                 }
                 
-                if (venueName || seating) {
-                    ctx.font = `400 ${w * 0.022}px ${fontFamily}`;
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                    const locationText = [venueName, seating].filter(Boolean).join(' | ');
-                    ctx.fillText(locationText, w - marginX, currentTopY);
-                    // Reset color for next sections
-                    ctx.fillStyle = 'white';
+                ctx.fillText(equipmentText, imgX + textMarginX, currentY);
+
+                // Line 2: Location
+                currentY += secondaryFontSize + lineSpacing;
+                ctx.font = `400 ${secondaryFontSize}px ${fontFamily}`; // Regular weight
+                ctx.fillText(locationText, imgX + textMarginX, currentY);
+
+                // Line 3: Optional Text
+                if (optionalText) {
+                    currentY += secondaryFontSize + lineSpacing;
+                    ctx.fillText(optionalText, imgX + textMarginX, currentY);
                 }
-            }
 
-            // --- Left Side (Equipment Details) ---
-            ctx.textAlign = 'left';
-            
-            ctx.font = `600 ${w * 0.038}px ${fontFamily}`;
-            ctx.fillText('拍攝器材', marginX, lineY - w * 0.025);
+                // Reset shadow before drawing logo
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
 
-            ctx.font = `${w * 0.028}px ${fontFamily}`;
-            if ('letterSpacing' in ctx) ctx.letterSpacing = `${w * 0.002}px`;
-            ctx.fillText(`相機 : ${camera}`, marginX, lineY + w * 0.05);
-            ctx.fillText(`鏡頭 : ${lens}`, marginX, lineY + w * 0.09);
+                // 6. Draw Top Right Brand Logo
+                if (logoObj) {
+                    // Set max bounds for the logo relative to the image size
+                    const logoMaxW = imgW * 0.25; // Max width is 25% of image width
+                    const logoMaxH = imgW * 0.08; // Max height is 8% of image width
+                    
+                    let logoW = logoObj.width;
+                    let logoH = logoObj.height;
+                    
+                    // Scale logo proportionally to fit within max bounds
+                    const scale = Math.min(logoMaxW / logoW, logoMaxH / logoH);
+                    logoW = logoW * scale;
+                    logoH = logoH * scale;
 
-            // --- Right Side (Branding) ---
-            ctx.textAlign = 'right';
-            
-            if ('letterSpacing' in ctx) ctx.letterSpacing = `0px`;
-            ctx.font = `600 ${w * 0.042}px ${fontFamily}`;
-            ctx.fillText(brandText, w - marginX, lineY + w * 0.05);
+                    // Position in top right
+                    const logoX = imgX + imgW - logoW - textMarginX;
+                    const logoY = imgY + imgW * 0.03; // Padding from top edge
 
-            if ('letterSpacing' in ctx) ctx.letterSpacing = `${w * 0.008}px`;
-            ctx.font = `${w * 0.018}px sans-serif`;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            ctx.fillText(subBrandText, w - marginX, lineY + w * 0.085);
+                    // Optional subtle shadow for logo visibility
+                    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                    ctx.shadowBlur = imgW * 0.01;
+                    
+                    ctx.drawImage(logoObj, logoX, logoY, logoW, logoH);
+                    
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                }
 
-            if ('letterSpacing' in ctx) ctx.letterSpacing = `0px`;
-
-        }, [imageObj, camera, lens, brandText, subBrandText, outputSize, overlayType, fontFamily, eventName, venueName, seating]);
+            }, [imageObj, logoObj, camera, lens, locationText, optionalText, outputSize, fontFamily, fontScale]);
 
             const downloadImage = () => {
                 if (!canvasRef.current) return;
@@ -344,9 +258,10 @@
                         <div className="space-y-6">
                             {/* SECTION 1 */}
                             <div>
-                                <h2 className="text-lg font-semibold text-white mb-3">1. Image & Layout</h2>
+                                <h2 className="text-lg font-semibold text-white mb-3">1. Images & Format</h2>
                                 <div className="space-y-4">
                                     <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Main Photo</label>
                                         <input 
                                             type="file" 
                                             accept="image/*" 
@@ -365,15 +280,6 @@
                                             <option value="original">Original Image Size</option>
                                         </select>
                                     </div>
-                                </div>
-                            </div>
-
-                            <hr className="border-gray-700" />
-
-                            {/* SECTION 2 */}
-                            <div>
-                                <h2 className="text-lg font-semibold text-white mb-3">2. Styling</h2>
-                                <div className="space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-400 mb-1">Typography Font</label>
                                         <select 
@@ -381,71 +287,23 @@
                                             onChange={(e) => setFontFamily(e.target.value)}
                                             className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                         >
-                                            <option value="'Noto Serif TC', serif">Noto Serif (Classic)</option>
                                             <option value="'Noto Sans TC', sans-serif">Noto Sans (Modern)</option>
-                                            <option value="'Cormorant Garamond', serif">Cormorant Garamond (Elegant)</option>
-                                            <option value="'Playfair Display', serif">Playfair Display (Editorial)</option>
-                                            <option value="'Cinzel', serif">Cinzel (Cinematic)</option>
+                                            <option value="'Noto Serif TC', serif">Noto Serif (Classic)</option>
                                             <option value="'Montserrat', sans-serif">Montserrat (Clean)</option>
-                                            <option value="'Oswald', sans-serif">Oswald (Bold)</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-1">Graphic Overlays</label>
-                                        <select 
-                                            value={overlayType} 
-                                            onChange={(e) => setOverlayType(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        >
-                                            <option value="both">Compass & Film Strip</option>
-                                            <option value="compass">Compass Only</option>
-                                            <option value="film">Film Strip Only</option>
-                                            <option value="none">None (Clean)</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <hr className="border-gray-700" />
-
-                            {/* SECTION 3 */}
-                            <div>
-                                <h2 className="text-lg font-semibold text-white mb-3">3. Text Content</h2>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-xs text-gray-400 mb-1">Camera (相機)</label>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">
+                                            Font Size ({Math.round(fontScale * 100)}%)
+                                        </label>
                                         <input 
-                                            type="text" 
-                                            value={camera} 
-                                            onChange={(e) => setCamera(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs text-gray-400 mb-1">Lens (鏡頭)</label>
-                                        <input 
-                                            type="text" 
-                                            value={lens} 
-                                            onChange={(e) => setLens(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs text-gray-400 mb-1">Brand Name</label>
-                                        <input 
-                                            type="text" 
-                                            value={brandText} 
-                                            onChange={(e) => setBrandText(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs text-gray-400 mb-1">Sub Title</label>
-                                        <input 
-                                            type="text" 
-                                            value={subBrandText} 
-                                            onChange={(e) => setSubBrandText(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                            type="range" 
+                                            min="0.5" 
+                                            max="1.5" 
+                                            step="0.05"
+                                            value={fontScale} 
+                                            onChange={(e) => setFontScale(parseFloat(e.target.value))}
+                                            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                                         />
                                     </div>
                                 </div>
@@ -453,41 +311,48 @@
 
                             <hr className="border-gray-700" />
 
-                            {/* SECTION 4 */}
+                            {/* SECTION 2 */}
                             <div>
-                                <h2 className="text-lg font-semibold text-white mb-3">4. Event Details (Optional)</h2>
+                                <h2 className="text-lg font-semibold text-white mb-3">2. Content Details</h2>
                                 <div className="space-y-3">
+                                    <div className="flex gap-2">
+                                        <div className="flex-1">
+                                            <label className="block text-xs text-gray-400 mb-1">Camera (相機)</label>
+                                            <input 
+                                                type="text" 
+                                                value={camera} 
+                                                onChange={(e) => setCamera(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-xs text-gray-400 mb-1">Lens (鏡頭)</label>
+                                            <input 
+                                                type="text" 
+                                                value={lens} 
+                                                onChange={(e) => setLens(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
                                     <div>
-                                        <label className="block text-xs text-gray-400 mb-1">Event Name</label>
+                                        <label className="block text-xs text-gray-400 mb-1">Event / Location</label>
                                         <input 
                                             type="text" 
-                                            value={eventName} 
-                                            onChange={(e) => setEventName(e.target.value)}
-                                            placeholder="e.g., Live Concert 2026"
+                                            value={locationText} 
+                                            onChange={(e) => setLocationText(e.target.value)}
                                             className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                         />
                                     </div>
-                                    <div className="flex flex-col sm:flex-row gap-3">
-                                        <div className="flex-1">
-                                            <label className="block text-xs text-gray-400 mb-1">Venue Name</label>
-                                            <input 
-                                                type="text" 
-                                                value={venueName} 
-                                                onChange={(e) => setVenueName(e.target.value)}
-                                                placeholder="e.g., AsiaWorld-Arena"
-                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                            />
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="block text-xs text-gray-400 mb-1">Seating</label>
-                                            <input 
-                                                type="text" 
-                                                value={seating} 
-                                                onChange={(e) => setSeating(e.target.value)}
-                                                placeholder="e.g., Block A, Row 5"
-                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                            />
-                                        </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Additional Text (Optional)</label>
+                                        <input 
+                                            type="text" 
+                                            value={optionalText} 
+                                            onChange={(e) => setOptionalText(e.target.value)}
+                                            placeholder="Leave blank to hide..."
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -508,7 +373,7 @@
                             Live Preview 
                         </div>
                         
-                        {/* Canvas Container with Checkerboard Background */}
+                        {/* Canvas Container */}
                         <div className="canvas-container w-full rounded-xl overflow-hidden shadow-2xl flex items-center justify-center min-h-[350px] lg:min-h-[500px] border border-gray-700 relative">
                             {!imageObj && (
                                 <p className="text-gray-500 italic absolute px-4 text-center">Upload an image to see the preview</p>
