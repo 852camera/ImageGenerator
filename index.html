@@ -51,7 +51,8 @@
             // Text content states
             const [camera, setCamera] = useState('Canon R7');
             const [lens, setLens] = useState('RF100500');
-            const [locationText, setLocationText] = useState('Kai Tak Arena Block A Row');
+            const [venue, setVenue] = useState('Kai Tak Arena');
+            const [seating, setSeating] = useState('Block A Row C');
             const [optionalText, setOptionalText] = useState('');
 
             const canvasRef = useRef(null);
@@ -61,7 +62,7 @@
                 const img = new Image();
                 img.onload = () => setLogoObj(img);
                 // Ensure your logo image is named 'logo.png' and placed in the same folder
-                img.src = 'logo.png'; 
+                img.src = 'logo.jpg'; 
             }, []);
 
             // Handle main image upload
@@ -215,7 +216,8 @@
                 // Line 2: Location
                 currentY += secondaryFontSize + lineSpacing;
                 ctx.font = `400 ${secondaryFontSize}px ${fontFamily}`; // Regular weight
-                ctx.fillText(locationText, imgX + textMarginX, currentY);
+                const locationDisplay = [venue, seating].filter(Boolean).join(' | ');
+                ctx.fillText(locationDisplay, imgX + textMarginX, currentY);
 
                 // Line 3: Optional Text
                 if (optionalText) {
@@ -313,7 +315,7 @@
                     ctx.shadowBlur = 0;
                 }
 
-            }, [imageObj, logoObj, seatingPlanObj, pinPosition, camera, lens, locationText, optionalText, outputSize, fontFamily, fontScale]);
+            }, [imageObj, logoObj, seatingPlanObj, pinPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale]);
 
             const downloadImage = () => {
                 if (!canvasRef.current) return;
@@ -410,14 +412,25 @@
                                             />
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs text-gray-400 mb-1">Event / Location</label>
-                                        <input 
-                                            type="text" 
-                                            value={locationText} 
-                                            onChange={(e) => setLocationText(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        />
+                                    <div className="flex gap-2">
+                                        <div className="flex-1">
+                                            <label className="block text-xs text-gray-400 mb-1">Venue / Event</label>
+                                            <input 
+                                                type="text" 
+                                                value={venue} 
+                                                onChange={(e) => setVenue(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-xs text-gray-400 mb-1">Seating / Row</label>
+                                            <input 
+                                                type="text" 
+                                                value={seating} 
+                                                onChange={(e) => setSeating(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block text-xs text-gray-400 mb-1">Additional Text (Optional)</label>
