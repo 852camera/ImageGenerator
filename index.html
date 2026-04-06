@@ -47,6 +47,7 @@
             const [outputSize, setOutputSize] = useState('ig');
             const [fontFamily, setFontFamily] = useState("'Noto Sans TC', sans-serif");
             const [fontScale, setFontScale] = useState(1);
+            const [logoPosition, setLogoPosition] = useState('top-right');
 
             // Text content states
             const [camera, setCamera] = useState('Canon R7');
@@ -231,7 +232,7 @@
                 ctx.shadowOffsetX = 0;
                 ctx.shadowOffsetY = 0;
 
-                // 6. Draw Top Right Brand Logo
+                // 6. Draw Top Brand Logo
                 if (logoObj) {
                     // Set max bounds for the logo relative to the image size
                     const logoMaxW = imgW * 0.25; // Max width is 25% of image width
@@ -245,8 +246,10 @@
                     logoW = logoW * scale;
                     logoH = logoH * scale;
 
-                    // Position in top right
-                    const logoX = imgX + imgW - logoW - textMarginX;
+                    // Position based on user selection
+                    const logoX = logoPosition === 'top-left' 
+                        ? imgX + textMarginX 
+                        : imgX + imgW - logoW - textMarginX;
                     const logoY = imgY + imgW * 0.03; // Padding from top edge
 
                     // Optional subtle shadow for logo visibility
@@ -326,7 +329,7 @@
                     ctx.shadowBlur = 0;
                 }
 
-            }, [imageObj, logoObj, seatingPlanObj, pinPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale]);
+            }, [imageObj, logoObj, seatingPlanObj, pinPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale, logoPosition]);
 
             const downloadImage = () => {
                 if (!canvasRef.current) return;
@@ -366,6 +369,17 @@
                                         >
                                             <option value="ig">Instagram Portrait (1080x1350)</option>
                                             <option value="original">Original Image Size</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Logo Position</label>
+                                        <select 
+                                            value={logoPosition} 
+                                            onChange={(e) => setLogoPosition(e.target.value)}
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        >
+                                            <option value="top-right">Top Right</option>
+                                            <option value="top-left">Top Left</option>
                                         </select>
                                     </div>
                                     <div>
