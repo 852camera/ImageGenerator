@@ -39,15 +39,20 @@
             const [logoObj, setLogoObj] = useState(null);
             const [seatingPlanObj, setSeatingPlanObj] = useState(null);
             const [seatingPlanSrc, setSeatingPlanSrc] = useState(null);
+            const [imageSrc, setImageSrc] = useState(null);
             
             // Interaction states
             const [pinPosition, setPinPosition] = useState(null);
+            const [mainImagePin, setMainImagePin] = useState(null);
             
             // UI states
             const [outputSize, setOutputSize] = useState('ig');
             const [fontFamily, setFontFamily] = useState("'Noto Sans TC', sans-serif");
             const [fontScale, setFontScale] = useState(1);
             const [logoPosition, setLogoPosition] = useState('top-right');
+            const [enableZoom, setEnableZoom] = useState(false);
+            const [zoomLevel, setZoomLevel] = useState(1); // Default to true 1:1 pixel crop
+            const [zoomPosition, setZoomPosition] = useState('top-left');
 
             // Text content states
             const [camera, setCamera] = useState('Canon R7');
@@ -72,6 +77,7 @@
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (event) => {
+                        setImageSrc(event.target.result);
                         const img = new Image();
                         img.onload = () => setImageObj(img);
                         img.src = event.target.result;
@@ -101,6 +107,14 @@
                 const x = (e.clientX - rect.left) / rect.width;
                 const y = (e.clientY - rect.top) / rect.height;
                 setPinPosition({ x, y });
+            };
+
+            // Handle pin dropping on the main image for zoom
+            const handleMainImageClick = (e) => {
+                const rect = e.target.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / rect.width;
+                const y = (e.clientY - rect.top) / rect.height;
+                setMainImagePin({ x, y });
             };
 
             const clearSeatingPlan = () => {
@@ -322,16 +336,135 @@
                         ctx.fill(pinPath);
                         
                         ctx.restore();
-                    }
-                    
-                    // Reset shadows
-                    ctx.shadowColor = 'transparent';
-                    ctx.shadowBlur = 0;
+                }
+                
+                // Reset shadows
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+            }
+
+            // 8. Draw Sharpness Zoom (Original Image Crop)
+            if (enableZoom && mainImagePin && imageObj) {
+                const insetSize = imgW * 0.25; // Inset size is 25% of final image width
+                
+                // Calculate source coordinates based on pin
+                const px = mainImagePin.x * imageObj.width;
+                const py = mainImagePin.y * imageObj.height;
+                
+                // Size of the area to crop from the original image
+                // 1x zoom = exactly 1:1 pixel mapping from original resolution
+                const sWidth = insetSize / zoomLevel;
+                const sHeight = insetSize / zoomLevel; // Force square crop
+                
+                // Center the crop on the pin
+                let sx = px - (sWidth / 2);
+                let sy = py - (sHeight / 2);
+                
+                // Clamp source coordinates to image bounds
+                if (sx < 0) sx = 0;
+                if (sy < 0) sy = 0;
+                if (sx + sWidth > imageObj.width) sx = imageObj.width - sWidth;
+                if (sy + sHeight > imageObj.height) sy = imageObj.height - sHeight;
+
+                // Destination coordinates based on selected position
+                let dx, dy;
+                const padding = imgW * 0.03;
+                
+                switch (zoomPosition) {
+                    case 'top-left':
+                        dx = imgX + padding;
+                        dy = imgY + padding;
+                        break;
+                    case 'top-right':
+                        dx = imgX + imgW - insetSize - padding;
+                        dy = imgY + padding;
+                        break;
+                    case 'bottom-left':
+                        dx = imgX + padding;
+                        dy = barY - insetSize - padding; // Place above the gradient bar
+                        break;
+                    case 'bottom-right':
+                        dx = imgX + imgW - insetSize - padding;
+                        dy = barY - insetSize - padding; // Place above the gradient bar
+                        break;
+                    default:
+                        dx = imgX + padding;
+                        dy = imgY + padding;
                 }
 
-            }, [imageObj, logoObj, seatingPlanObj, pinPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale, logoPosition]);
+                // Avoid overlapping with the logo if it's in the same top position
+                if (logoObj) {
+                    const logoMaxH = imgW * 0.08;
+                    if (zoomPosition === 'top-right' && logoPosition === 'top-right') {
+                        dy += logoMaxH + padding;
+                    } else if (zoomPosition === 'top-left' && logoPosition === 'top-left') {
+                        dy += logoMaxH + padding;
+                    }
+                }
+                
+                // Avoid overlapping with seating plan if both are bottom-right
+                if (seatingPlanObj && zoomPosition === 'bottom-right') {
+                    const spMaxH = imgH * 0.20;
+                    dy -= spMaxH + padding;
+                }
 
-            const downloadImage = () => {
+                // Draw a reticle box on the main image to show the zoomed area
+                const mainRectW = sWidth * (imgW / imageObj.width);
+                const mainRectH = sHeight * (imgH / imageObj.height);
+                const mainRectX = imgX + (sx * (imgW / imageObj.width));
+                const mainRectY = imgY + (sy * (imgH / imageObj.height));
+
+                ctx.save();
+                ctx.lineWidth = imgW * 0.002;
+                ctx.strokeStyle = '#ef4444'; // Red box
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = imgW * 0.005;
+                ctx.strokeRect(mainRectX, mainRectY, mainRectW, mainRectH);
+                
+                // Draw crosshair center point
+                ctx.beginPath();
+                ctx.arc(mainRectX + mainRectW/2, mainRectY + mainRectH/2, imgW * 0.003, 0, Math.PI * 2);
+                ctx.fillStyle = '#ef4444';
+                ctx.fill();
+                ctx.restore();
+
+                // Draw the zoomed circular inset
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(dx + insetSize/2, dy + insetSize/2, insetSize/2, 0, Math.PI * 2);
+                
+                // Border and shadow for the inset circle
+                ctx.shadowColor = 'rgba(0,0,0,0.6)';
+                ctx.shadowBlur = imgW * 0.015;
+                ctx.shadowOffsetY = imgW * 0.005;
+                ctx.fillStyle = 'white';
+                ctx.fill(); 
+                
+                // Clip to circle and draw image
+                ctx.clip();
+                ctx.drawImage(imageObj, sx, sy, sWidth, sHeight, dx, dy, insetSize, insetSize);
+                
+                // Inner border to clean up edges
+                ctx.shadowColor = 'transparent';
+                ctx.lineWidth = imgW * 0.006;
+                ctx.strokeStyle = 'white';
+                ctx.stroke();
+                
+                ctx.restore();
+                
+                // Text label for zoom
+                ctx.font = `800 ${imgW * 0.016}px ${fontFamily}`;
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = imgW * 0.005;
+                ctx.fillText(`${zoomLevel}x ZOOM`, dx + insetSize/2, dy + insetSize + imgW * 0.025);
+                ctx.shadowColor = 'transparent';
+            }
+
+        }, [imageObj, logoObj, seatingPlanObj, pinPosition, mainImagePin, enableZoom, zoomLevel, zoomPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale, logoPosition]);
+
+        const downloadImage = () => {
                 if (!canvasRef.current) return;
                 const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95);
                 const link = document.createElement('a');
@@ -515,19 +648,89 @@
                                                 )}
                                             </div>
                                             <button 
-                                                onClick={clearSeatingPlan} 
-                                                className="text-xs text-red-400 mt-3 block w-full hover:text-red-300 transition"
-                                            >
-                                                Remove Seating Plan
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
+                                            onClick={clearSeatingPlan} 
+                                            className="text-xs text-red-400 mt-3 block w-full hover:text-red-300 transition"
+                                        >
+                                            Remove Seating Plan
+                                        </button>
+                                    </div>
+                                )}
                             </div>
+                        </div>
 
-                            <button 
-                                onClick={downloadImage}
-                                disabled={!imageObj}
+                        <hr className="border-gray-700" />
+
+                        {/* SECTION 4: Sharpness Zoom */}
+                        <div>
+                            <h2 className="text-lg font-semibold text-white mb-3">4. Sharpness Zoom (Optional)</h2>
+                            <div className="space-y-4">
+                                <label className="flex items-center space-x-3 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={enableZoom} 
+                                        onChange={(e) => setEnableZoom(e.target.checked)} 
+                                        className="w-5 h-5 accent-blue-500 rounded bg-gray-900 border-gray-600 focus:ring-blue-500 focus:ring-2"
+                                    />
+                                    <span className="text-sm font-medium text-gray-300">Enable Sharpness Zoom</span>
+                                </label>
+
+                                {enableZoom && imageSrc && (
+                                    <div className="bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
+                                        <label className="block text-xs font-semibold text-gray-300 mb-2">
+                                            Tap / Click on the image to select zoom area
+                                        </label>
+                                        <div className="relative inline-block border border-gray-600 bg-black rounded overflow-hidden">
+                                            <img 
+                                                src={imageSrc} 
+                                                alt="Main Thumbnail" 
+                                                className="max-h-48 max-w-full cursor-crosshair object-contain" 
+                                                onClick={handleMainImageClick}
+                                            />
+                                            {mainImagePin && (
+                                                <div 
+                                                    className="absolute w-4 h-4 border-2 border-red-500 pointer-events-none"
+                                                    style={{
+                                                        left: `${mainImagePin.x * 100}%`,
+                                                        top: `${mainImagePin.y * 100}%`,
+                                                        transform: 'translate(-50%, -50%)',
+                                                        boxShadow: '0 0 0 1px white, inset 0 0 0 1px white'
+                                                    }}
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="mt-4 text-left space-y-3">
+                                            <div>
+                                                <label className="block text-xs text-gray-400 mb-1">Zoom Position</label>
+                                                <select 
+                                                    value={zoomPosition} 
+                                                    onChange={(e) => setZoomPosition(e.target.value)}
+                                                    className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                >
+                                                    <option value="top-left">Top Left</option>
+                                                    <option value="top-right">Top Right</option>
+                                                    <option value="bottom-left">Bottom Left</option>
+                                                    <option value="bottom-right">Bottom Right</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-400 mb-1">Zoom Level ({zoomLevel}x)</label>
+                                                <input 
+                                                    type="range" 
+                                                    min="0.1" max="5" step="0.1" 
+                                                    value={zoomLevel} 
+                                                    onChange={(e) => setZoomLevel(parseFloat(e.target.value))} 
+                                                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={downloadImage}
+                            disabled={!imageObj}
                                 className={`w-full py-3 mt-4 rounded-md font-bold text-lg transition ${imageObj ? 'bg-green-600 hover:bg-green-500 text-white cursor-pointer shadow-lg' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
                             >
                                 Export & Download
