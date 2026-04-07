@@ -51,8 +51,9 @@
             const [fontScale, setFontScale] = useState(1);
             const [logoPosition, setLogoPosition] = useState('top-right');
             const [enableZoom, setEnableZoom] = useState(false);
-            const [zoomLevel, setZoomLevel] = useState(1); // Default to true 1:1 pixel crop
+            const [zoomLevel, setZoomLevel] = useState(2); // Default to 2x zoom
             const [zoomPosition, setZoomPosition] = useState('top-left');
+            const [zoomSize, setZoomSize] = useState(0.25); // Default to 25% of image width
 
             // Text content states
             const [camera, setCamera] = useState('Canon R7');
@@ -336,135 +337,136 @@
                         ctx.fill(pinPath);
                         
                         ctx.restore();
-                }
-                
-                // Reset shadows
-                ctx.shadowColor = 'transparent';
-                ctx.shadowBlur = 0;
-            }
-
-            // 8. Draw Sharpness Zoom (Original Image Crop)
-            if (enableZoom && mainImagePin && imageObj) {
-                const insetSize = imgW * 0.25; // Inset size is 25% of final image width
-                
-                // Calculate source coordinates based on pin
-                const px = mainImagePin.x * imageObj.width;
-                const py = mainImagePin.y * imageObj.height;
-                
-                // Size of the area to crop from the original image
-                // 1x zoom = exactly 1:1 pixel mapping from original resolution
-                const sWidth = insetSize / zoomLevel;
-                const sHeight = insetSize / zoomLevel; // Force square crop
-                
-                // Center the crop on the pin
-                let sx = px - (sWidth / 2);
-                let sy = py - (sHeight / 2);
-                
-                // Clamp source coordinates to image bounds
-                if (sx < 0) sx = 0;
-                if (sy < 0) sy = 0;
-                if (sx + sWidth > imageObj.width) sx = imageObj.width - sWidth;
-                if (sy + sHeight > imageObj.height) sy = imageObj.height - sHeight;
-
-                // Destination coordinates based on selected position
-                let dx, dy;
-                const padding = imgW * 0.03;
-                
-                switch (zoomPosition) {
-                    case 'top-left':
-                        dx = imgX + padding;
-                        dy = imgY + padding;
-                        break;
-                    case 'top-right':
-                        dx = imgX + imgW - insetSize - padding;
-                        dy = imgY + padding;
-                        break;
-                    case 'bottom-left':
-                        dx = imgX + padding;
-                        dy = barY - insetSize - padding; // Place above the gradient bar
-                        break;
-                    case 'bottom-right':
-                        dx = imgX + imgW - insetSize - padding;
-                        dy = barY - insetSize - padding; // Place above the gradient bar
-                        break;
-                    default:
-                        dx = imgX + padding;
-                        dy = imgY + padding;
-                }
-
-                // Avoid overlapping with the logo if it's in the same top position
-                if (logoObj) {
-                    const logoMaxH = imgW * 0.08;
-                    if (zoomPosition === 'top-right' && logoPosition === 'top-right') {
-                        dy += logoMaxH + padding;
-                    } else if (zoomPosition === 'top-left' && logoPosition === 'top-left') {
-                        dy += logoMaxH + padding;
                     }
-                }
-                
-                // Avoid overlapping with seating plan if both are bottom-right
-                if (seatingPlanObj && zoomPosition === 'bottom-right') {
-                    const spMaxH = imgH * 0.20;
-                    dy -= spMaxH + padding;
+                    
+                    // Reset shadows
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
                 }
 
-                // Draw a reticle box on the main image to show the zoomed area
-                const mainRectW = sWidth * (imgW / imageObj.width);
-                const mainRectH = sHeight * (imgH / imageObj.height);
-                const mainRectX = imgX + (sx * (imgW / imageObj.width));
-                const mainRectY = imgY + (sy * (imgH / imageObj.height));
+                // 8. Draw Sharpness Zoom (Original Image Crop)
+                if (enableZoom && mainImagePin && imageObj) {
+                    const insetSize = imgW * zoomSize; // Dynamic inset size based on user selection
+                    const baseCropReference = imgW * 0.25; // Fixed reference to lock the selected range
+                    
+                    // Calculate source coordinates based on pin
+                    const px = mainImagePin.x * imageObj.width;
+                    const py = mainImagePin.y * imageObj.height;
+                    
+                    // Size of the area to crop from the original image
+                    // The range is now locked to the zoomLevel and independent of zoomSize
+                    const sWidth = baseCropReference / zoomLevel;
+                    const sHeight = baseCropReference / zoomLevel; // Force square crop
+                    
+                    // Center the crop on the pin
+                    let sx = px - (sWidth / 2);
+                    let sy = py - (sHeight / 2);
+                    
+                    // Clamp source coordinates to image bounds
+                    if (sx < 0) sx = 0;
+                    if (sy < 0) sy = 0;
+                    if (sx + sWidth > imageObj.width) sx = imageObj.width - sWidth;
+                    if (sy + sHeight > imageObj.height) sy = imageObj.height - sHeight;
 
-                ctx.save();
-                ctx.lineWidth = imgW * 0.002;
-                ctx.strokeStyle = '#ef4444'; // Red box
-                ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                ctx.shadowBlur = imgW * 0.005;
-                ctx.strokeRect(mainRectX, mainRectY, mainRectW, mainRectH);
-                
-                // Draw crosshair center point
-                ctx.beginPath();
-                ctx.arc(mainRectX + mainRectW/2, mainRectY + mainRectH/2, imgW * 0.003, 0, Math.PI * 2);
-                ctx.fillStyle = '#ef4444';
-                ctx.fill();
-                ctx.restore();
+                    // Destination coordinates based on selected position
+                    let dx, dy;
+                    const padding = imgW * 0.03;
+                    
+                    switch (zoomPosition) {
+                        case 'top-left':
+                            dx = imgX + padding;
+                            dy = imgY + padding;
+                            break;
+                        case 'top-right':
+                            dx = imgX + imgW - insetSize - padding;
+                            dy = imgY + padding;
+                            break;
+                        case 'bottom-left':
+                            dx = imgX + padding;
+                            dy = barY - insetSize - padding; // Place above the gradient bar
+                            break;
+                        case 'bottom-right':
+                            dx = imgX + imgW - insetSize - padding;
+                            dy = barY - insetSize - padding; // Place above the gradient bar
+                            break;
+                        default:
+                            dx = imgX + padding;
+                            dy = imgY + padding;
+                    }
 
-                // Draw the zoomed circular inset
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(dx + insetSize/2, dy + insetSize/2, insetSize/2, 0, Math.PI * 2);
-                
-                // Border and shadow for the inset circle
-                ctx.shadowColor = 'rgba(0,0,0,0.6)';
-                ctx.shadowBlur = imgW * 0.015;
-                ctx.shadowOffsetY = imgW * 0.005;
-                ctx.fillStyle = 'white';
-                ctx.fill(); 
-                
-                // Clip to circle and draw image
-                ctx.clip();
-                ctx.drawImage(imageObj, sx, sy, sWidth, sHeight, dx, dy, insetSize, insetSize);
-                
-                // Inner border to clean up edges
-                ctx.shadowColor = 'transparent';
-                ctx.lineWidth = imgW * 0.006;
-                ctx.strokeStyle = 'white';
-                ctx.stroke();
-                
-                ctx.restore();
-                
-                // Text label for zoom
-                ctx.font = `800 ${imgW * 0.016}px ${fontFamily}`;
-                ctx.fillStyle = 'white';
-                ctx.textAlign = 'center';
-                ctx.shadowColor = 'rgba(0,0,0,0.8)';
-                ctx.shadowBlur = imgW * 0.005;
-                ctx.fillText(`${zoomLevel}x ZOOM`, dx + insetSize/2, dy + insetSize + imgW * 0.025);
-                ctx.shadowColor = 'transparent';
-            }
+                    // Avoid overlapping with the logo if it's in the same top position
+                    if (logoObj) {
+                        const logoMaxH = imgW * 0.08;
+                        if (zoomPosition === 'top-right' && logoPosition === 'top-right') {
+                            dy += logoMaxH + padding;
+                        } else if (zoomPosition === 'top-left' && logoPosition === 'top-left') {
+                            dy += logoMaxH + padding;
+                        }
+                    }
+                    
+                    // Avoid overlapping with seating plan if both are bottom-right
+                    if (seatingPlanObj && zoomPosition === 'bottom-right') {
+                        const spMaxH = imgH * 0.20;
+                        dy -= spMaxH + padding;
+                    }
 
-        }, [imageObj, logoObj, seatingPlanObj, pinPosition, mainImagePin, enableZoom, zoomLevel, zoomPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale, logoPosition]);
+                    // Draw a reticle box on the main image to show the zoomed area
+                    const mainRectW = sWidth * (imgW / imageObj.width);
+                    const mainRectH = sHeight * (imgH / imageObj.height);
+                    const mainRectX = imgX + (sx * (imgW / imageObj.width));
+                    const mainRectY = imgY + (sy * (imgH / imageObj.height));
 
-        const downloadImage = () => {
+                    ctx.save();
+                    ctx.lineWidth = imgW * 0.002;
+                    ctx.strokeStyle = '#ef4444'; // Red box
+                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                    ctx.shadowBlur = imgW * 0.005;
+                    ctx.strokeRect(mainRectX, mainRectY, mainRectW, mainRectH);
+                    
+                    // Draw crosshair center point
+                    ctx.beginPath();
+                    ctx.arc(mainRectX + mainRectW/2, mainRectY + mainRectH/2, imgW * 0.003, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fill();
+                    ctx.restore();
+
+                    // Draw the zoomed circular inset
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(dx + insetSize/2, dy + insetSize/2, insetSize/2, 0, Math.PI * 2);
+                    
+                    // Border and shadow for the inset circle
+                    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+                    ctx.shadowBlur = imgW * 0.015;
+                    ctx.shadowOffsetY = imgW * 0.005;
+                    ctx.fillStyle = 'white';
+                    ctx.fill(); 
+                    
+                    // Clip to circle and draw image
+                    ctx.clip();
+                    ctx.drawImage(imageObj, sx, sy, sWidth, sHeight, dx, dy, insetSize, insetSize);
+                    
+                    // Inner border to clean up edges
+                    ctx.shadowColor = 'transparent';
+                    ctx.lineWidth = imgW * 0.006;
+                    ctx.strokeStyle = 'white';
+                    ctx.stroke();
+                    
+                    ctx.restore();
+                    
+                    // Text label for zoom
+                    ctx.font = `800 ${imgW * 0.016}px ${fontFamily}`;
+                    ctx.fillStyle = 'white';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                    ctx.shadowBlur = imgW * 0.005;
+                    ctx.fillText(`${zoomLevel}x ZOOM`, dx + insetSize/2, dy + insetSize + imgW * 0.025);
+                    ctx.shadowColor = 'transparent';
+                }
+
+            }, [imageObj, logoObj, seatingPlanObj, pinPosition, mainImagePin, enableZoom, zoomLevel, zoomSize, zoomPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale, logoPosition]);
+
+            const downloadImage = () => {
                 if (!canvasRef.current) return;
                 const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95);
                 const link = document.createElement('a');
@@ -716,9 +718,19 @@
                                                 <label className="block text-xs text-gray-400 mb-1">Zoom Level ({zoomLevel}x)</label>
                                                 <input 
                                                     type="range" 
-                                                    min="0.1" max="5" step="0.1" 
+                                                    min="2" max="5" step="0.1" 
                                                     value={zoomLevel} 
                                                     onChange={(e) => setZoomLevel(parseFloat(e.target.value))} 
+                                                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-400 mb-1">Thumbnail Size ({Math.round(zoomSize * 100)}%)</label>
+                                                <input 
+                                                    type="range" 
+                                                    min="0.1" max="0.5" step="0.05" 
+                                                    value={zoomSize} 
+                                                    onChange={(e) => setZoomSize(parseFloat(e.target.value))} 
                                                     className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
                                                 />
                                             </div>
@@ -731,37 +743,37 @@
                         <button 
                             onClick={downloadImage}
                             disabled={!imageObj}
-                                className={`w-full py-3 mt-4 rounded-md font-bold text-lg transition ${imageObj ? 'bg-green-600 hover:bg-green-500 text-white cursor-pointer shadow-lg' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
-                            >
-                                Export & Download
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Preview Panel */}
-                    <div className="w-full lg:w-2/3 xl:w-3/4 flex flex-col items-center">
-                        <div className="w-full text-center mb-2 text-gray-400">
-                            Live Preview 
-                        </div>
-                        
-                        {/* Canvas Container */}
-                        <div className="canvas-container w-full rounded-xl overflow-hidden shadow-2xl flex items-center justify-center min-h-[350px] lg:min-h-[500px] border border-gray-700 relative">
-                            {!imageObj && (
-                                <p className="text-gray-500 italic absolute px-4 text-center">Upload an image to see the preview</p>
-                            )}
-                            <canvas 
-                                ref={canvasRef} 
-                                className="max-w-full max-h-[60vh] lg:max-h-[85vh] object-contain shadow-2xl"
-                                style={{ display: imageObj ? 'block' : 'none' }}
-                            />
-                        </div>
+                            className={`w-full py-3 mt-4 rounded-md font-bold text-lg transition ${imageObj ? 'bg-green-600 hover:bg-green-500 text-white cursor-pointer shadow-lg' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
+                        >
+                            Export & Download
+                        </button>
                     </div>
                 </div>
-            );
-        };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+                {/* Preview Panel */}
+                <div className="w-full lg:w-2/3 xl:w-3/4 flex flex-col items-center">
+                    <div className="w-full text-center mb-2 text-gray-400">
+                        Live Preview 
+                    </div>
+                    
+                    {/* Canvas Container */}
+                    <div className="canvas-container w-full rounded-xl overflow-hidden shadow-2xl flex items-center justify-center min-h-[350px] lg:min-h-[500px] border border-gray-700 relative">
+                        {!imageObj && (
+                            <p className="text-gray-500 italic absolute px-4 text-center">Upload an image to see the preview</p>
+                        )}
+                        <canvas 
+                            ref={canvasRef} 
+                            className="max-w-full max-h-[60vh] lg:max-h-[85vh] object-contain shadow-2xl"
+                            style={{ display: imageObj ? 'block' : 'none' }}
+                        />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
     </script>
 </body>
 </html>
