@@ -410,26 +410,6 @@
                         dy -= spMaxH + padding;
                     }
 
-                    // Draw a reticle box on the main image to show the zoomed area
-                    const mainRectW = sWidth * (imgW / imageObj.width);
-                    const mainRectH = sHeight * (imgH / imageObj.height);
-                    const mainRectX = imgX + (sx * (imgW / imageObj.width));
-                    const mainRectY = imgY + (sy * (imgH / imageObj.height));
-
-                    ctx.save();
-                    ctx.lineWidth = imgW * 0.002;
-                    ctx.strokeStyle = '#ef4444'; // Red box
-                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                    ctx.shadowBlur = imgW * 0.005;
-                    ctx.strokeRect(mainRectX, mainRectY, mainRectW, mainRectH);
-                    
-                    // Draw crosshair center point
-                    ctx.beginPath();
-                    ctx.arc(mainRectX + mainRectW/2, mainRectY + mainRectH/2, imgW * 0.003, 0, Math.PI * 2);
-                    ctx.fillStyle = '#ef4444';
-                    ctx.fill();
-                    ctx.restore();
-
                     // Draw the zoomed circular inset
                     ctx.save();
                     ctx.beginPath();
