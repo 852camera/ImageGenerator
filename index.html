@@ -449,16 +449,30 @@
                     const dynamicBitrate = Math.round((totalPixels / 2073600) * 8000000); 
                     const safeBitrate = Math.min(Math.max(dynamicBitrate, 5000000), 50000000);
 
-                    const recorder = new MediaRecorder(stream, { videoBitsPerSecond: safeBitrate }); // Dynamic bitrate WebM
+                    // Determine best supported MIME type, prioritizing MP4
+                    let mimeType = 'video/webm';
+                    let fileExt = 'webm';
+                    
+                    if (MediaRecorder.isTypeSupported('video/mp4')) {
+                        mimeType = 'video/mp4';
+                        fileExt = 'mp4';
+                    }
+
+                    const recorderOptions = { 
+                        videoBitsPerSecond: safeBitrate,
+                        mimeType: mimeType
+                    };
+
+                    const recorder = new MediaRecorder(stream, recorderOptions); 
                     const chunks = [];
 
                     recorder.ondataavailable = e => chunks.push(e.data);
                     recorder.onstop = () => {
-                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        const blob = new Blob(chunks, { type: mimeType });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = 'watermarked_video.webm';
+                        a.download = `watermarked_video.${fileExt}`;
                         a.click();
                         setIsRecording(false);
                         imageObj.loop = true; // Restore loop for preview
@@ -499,7 +513,7 @@
                         {mediaType === 'video' && (
                             <div className="mb-6 p-3 bg-blue-900/30 border border-blue-700 rounded-lg">
                                 <p className="text-xs text-blue-200 leading-relaxed">
-                                    <span className="font-bold">Experimental Video Mode:</span> Videos are processed locally in your browser. Exported files will be saved as <b>.webm</b>. Very high-resolution files (like 4K) may drop frames depending on your computer's speed.
+                                    <span className="font-bold">Experimental Video Mode:</span> Videos are processed locally in your browser. Exported files will be saved as <b>.mp4</b> (if supported by your browser) or <b>.webm</b>. Very high-resolution files (like 4K) may drop frames depending on your computer's speed.
                                 </p>
                             </div>
                         )}
@@ -767,10 +781,8 @@
                             >
                                 {isRecording ? (
                                     <span>Recording... {recordingProgress}%</span>
-                                ) : mediaType === 'video' ? (
-                                    <span>Export Video (WebM)</span>
                                 ) : (
-                                    <span>Export Image (JPG)</span>
+                                    <span>Export {mediaType === 'video' ? 'Video' : 'Image'}</span>
                                 )}
                             </button>
                         </div>
