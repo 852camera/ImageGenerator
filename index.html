@@ -88,7 +88,6 @@
                         vid.playsInline = true;
                         vid.crossOrigin = "anonymous";
                         
-                        // CRITICAL FIX: Append the video to the hidden DOM so the browser processes its audio context properly
                         vid.style.display = 'none';
                         document.body.appendChild(vid);
                         
@@ -153,9 +152,7 @@
                 let w, h;
                 let imgX = 0, imgY = 0, imgW, imgH;
 
-                // 1. Determine Canvas Size (Force 4K minimum for crisp watermarks)
-                const TARGET_4K = 3840;
-
+                // 1. Determine Canvas Size
                 if (outputSize === 'ig') {
                     const targetRatio = 4 / 5;
                     const imgRatio = mWidth / mHeight;
@@ -169,20 +166,13 @@
                         cw = ch * targetRatio;
                     }
 
-                    // Force upscale to 4K equivalent for 4:5 ratio (e.g. 3072 x 3840)
-                    const scaleTo4K = Math.max(1, TARGET_4K / Math.max(cw, ch));
-                    
-                    canvas.width = Math.round(cw * scaleTo4K);
-                    canvas.height = Math.round(ch * scaleTo4K);
+                    canvas.width = Math.max(1080, Math.round(cw));
+                    canvas.height = Math.max(1350, Math.round(ch));
                     w = canvas.width;
                     h = canvas.height;
                 } else {
-                    // Original ratio, but enforce 4K minimum dimension
-                    const maxDim = Math.max(mWidth, mHeight);
-                    const scaleTo4K = Math.max(1, TARGET_4K / maxDim);
-                    
-                    canvas.width = Math.round(mWidth * scaleTo4K);
-                    canvas.height = Math.round(mHeight * scaleTo4K);
+                    canvas.width = mWidth;
+                    canvas.height = mHeight;
                     w = canvas.width;
                     h = canvas.height;
                 }
@@ -191,7 +181,7 @@
                 imgH = h;
                 ctx.clearRect(0, 0, w, h);
 
-                // 2. Draw Media (Native browser scaling handles up-resing the source video)
+                // 2. Draw Media
                 if (outputSize === 'ig') {
                     ctx.fillStyle = 'white';
                     ctx.fillRect(0, 0, w, h);
@@ -211,7 +201,7 @@
                     ctx.drawImage(imageObj, 0, 0, w, h);
                 }
 
-                // 3. Text Scaling & Dimensions (Now scales cleanly at 4K resolution)
+                // 3. Text Scaling & Dimensions
                 const textMarginX = imgW * 0.025; 
                 const primaryFontSize = imgW * 0.036 * fontScale;
                 const secondaryFontSize = imgW * 0.028 * fontScale;
@@ -477,10 +467,10 @@
 
                     const finalStream = new MediaStream(combinedTracks);
 
-                    // 4. Calculate Bitrate and Setup Recorder (Ensure high bitrate for 4K)
+                    // 4. Calculate Bitrate and Setup Recorder
                     const totalPixels = canvas.width * canvas.height;
                     const dynamicBitrate = Math.round((totalPixels / 2073600) * 8000000); 
-                    const safeBitrate = Math.min(Math.max(dynamicBitrate, 10000000), 80000000); // Bumped max to 80Mbps for 4K
+                    const safeBitrate = Math.min(Math.max(dynamicBitrate, 5000000), 50000000);
 
                     let mimeType = 'video/webm';
                     let fileExt = 'webm';
@@ -559,7 +549,7 @@
                         {mediaType === 'video' && (
                             <div className="mb-6 p-3 bg-blue-900/30 border border-blue-700 rounded-lg">
                                 <p className="text-xs text-blue-200 leading-relaxed">
-                                    <span className="font-bold">4K Video Mode:</span> Videos are upscaled to 4K internally to ensure perfectly sharp watermarks. Exporting 4K video locally may take time depending on your computer's speed.
+                                    <span className="font-bold">Experimental Video Mode:</span> Videos are processed locally in your browser. Exported files will be saved as <b>.mp4</b> (if supported by your browser) or <b>.webm</b>. Very high-resolution files (like 4K) may drop frames depending on your computer's speed.
                                 </p>
                             </div>
                         )}
@@ -585,8 +575,8 @@
                                             onChange={(e) => setOutputSize(e.target.value)}
                                             className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                         >
-                                            <option value="ig">Instagram 4:5 (4K Crisp Text)</option>
-                                            <option value="original">Original Ratio (4K Crisp Text)</option>
+                                            <option value="ig">Instagram 4:5 (Original Res)</option>
+                                            <option value="original">Original Image Size</option>
                                         </select>
                                     </div>
                                     <div>
@@ -828,7 +818,7 @@
                                 {isRecording ? (
                                     <span>Recording... {recordingProgress}%</span>
                                 ) : (
-                                    <span>Export {mediaType === 'video' ? '4K Video' : '4K Image'}</span>
+                                    <span>Export {mediaType === 'video' ? 'Video' : 'Image'}</span>
                                 )}
                             </button>
                         </div>
