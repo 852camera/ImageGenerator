@@ -432,6 +432,19 @@
                     setIsRecording(true);
                     setRecordingProgress(0);
 
+                    // Prep video for recording sequence
+                    imageObj.pause();
+                    imageObj.loop = false;
+                    imageObj.muted = false; // UNMUTE to ensure audio tracks are active
+                    imageObj.currentTime = 0;
+                    
+                    // Play the video briefly to initialize audio tracks before capturing stream
+                    try {
+                        await imageObj.play();
+                    } catch (err) {
+                        console.warn("Auto-play prevented", err);
+                    }
+
                     const stream = canvas.captureStream(30); // Capture at 30fps
                     
                     // Attempt to capture original audio and attach to stream
@@ -475,13 +488,12 @@
                         a.download = `watermarked_video.${fileExt}`;
                         a.click();
                         setIsRecording(false);
-                        imageObj.loop = true; // Restore loop for preview
+                        
+                        // Restore silent preview state
+                        imageObj.muted = true;
+                        imageObj.loop = true; 
                         imageObj.play();
                     };
-
-                    // Prep video for recording sequence
-                    imageObj.loop = false;
-                    imageObj.currentTime = 0;
 
                     // Progress tracker
                     const duration = imageObj.duration;
@@ -500,7 +512,6 @@
 
                     // Start recording
                     recorder.start();
-                    imageObj.play();
                 }
             };
 
