@@ -4,14 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Photo Watermark Studio</title>
-    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Google Fonts for Typography -->
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,700;0,900;1,900&family=Noto+Sans+TC:wght@400;700;900&family=Noto+Serif+TC:wght@400;700;900&display=swap" rel="stylesheet">
     
     <style>
@@ -90,6 +86,12 @@
                         vid.muted = true; // Auto-play policies require muted
                         vid.loop = true;
                         vid.playsInline = true;
+                        vid.crossOrigin = "anonymous";
+                        
+                        // CRITICAL FIX: Append the video to the hidden DOM so the browser processes its audio context properly
+                        vid.style.display = 'none';
+                        document.body.appendChild(vid);
+                        
                         vid.onloadeddata = () => {
                             setImageObj(vid);
                             vid.play();
@@ -432,41 +434,56 @@
                     setIsRecording(true);
                     setRecordingProgress(0);
 
-                    // Prep video for recording sequence
+                    // 1. Prepare video for playback (Unmute it)
                     imageObj.pause();
                     imageObj.loop = false;
-                    imageObj.muted = false; // UNMUTE to ensure audio tracks are active
+                    imageObj.muted = false; // CRITICAL: Unmute so audio track activates
+                    imageObj.volume = 1.0;
                     imageObj.currentTime = 0;
-                    
-                    // Play the video briefly to initialize audio tracks before capturing stream
+
+                    // Await playback so the browser knows the media is actively playing audio
                     try {
                         await imageObj.play();
                     } catch (err) {
-                        console.warn("Auto-play prevented", err);
+                        console.error("Playback failed (possibly autoplay policy):", err);
                     }
 
-                    const stream = canvas.captureStream(30); // Capture at 30fps
-                    
-                    // Attempt to capture original audio and attach to stream
+                    // 2. Explicitly merge tracks: Canvas (Video) + Original Source (Audio)
+                    const canvasStream = canvas.captureStream(30); 
+                    const combinedTracks = [...canvasStream.getVideoTracks()];
+
                     try {
-                        const vidStream = imageObj.captureStream ? imageObj.captureStream() : imageObj.mozCaptureStream ? imageObj.mozCaptureStream() : null;
+                        // Grab stream directly from the unmuted HTML video element
+                        let vidStream = null;
+                        if (typeof imageObj.captureStream === 'function') {
+                            vidStream = imageObj.captureStream();
+                        } else if (typeof imageObj.mozCaptureStream === 'function') {
+                            vidStream = imageObj.mozCaptureStream();
+                        }
+
                         if (vidStream && vidStream.getAudioTracks().length > 0) {
-                            stream.addTrack(vidStream.getAudioTracks()[0]);
+                            combinedTracks.push(vidStream.getAudioTracks()[0]);
+                        } else {
+                            console.warn("No audio tracks found in the video stream.");
                         }
                     } catch (e) {
                         console.warn("Could not capture audio stream", e);
                     }
 
-                    // Dynamically calculate bitrate: ~8Mbps for 1080p, ~35Mbps for 4K
+                    const finalStream = new MediaStream(combinedTracks);
+
+                    // 3. Set up the dynamic bitrate and encoding properties
                     const totalPixels = canvas.width * canvas.height;
                     const dynamicBitrate = Math.round((totalPixels / 2073600) * 8000000); 
                     const safeBitrate = Math.min(Math.max(dynamicBitrate, 5000000), 50000000);
 
-                    // Determine best supported MIME type, prioritizing MP4
                     let mimeType = 'video/webm';
                     let fileExt = 'webm';
                     
-                    if (MediaRecorder.isTypeSupported('video/mp4')) {
+                    if (MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E, mp4a.40.2"')) {
+                        mimeType = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"';
+                        fileExt = 'mp4';
+                    } else if (MediaRecorder.isTypeSupported('video/mp4')) {
                         mimeType = 'video/mp4';
                         fileExt = 'mp4';
                     }
@@ -476,10 +493,14 @@
                         mimeType: mimeType
                     };
 
-                    const recorder = new MediaRecorder(stream, recorderOptions); 
+                    // Initialize MediaRecorder with the newly combined stream
+                    const recorder = new MediaRecorder(finalStream, recorderOptions); 
                     const chunks = [];
 
-                    recorder.ondataavailable = e => chunks.push(e.data);
+                    recorder.ondataavailable = e => {
+                        if (e.data && e.data.size > 0) chunks.push(e.data);
+                    };
+
                     recorder.onstop = () => {
                         const blob = new Blob(chunks, { type: mimeType });
                         const url = URL.createObjectURL(blob);
@@ -489,13 +510,13 @@
                         a.click();
                         setIsRecording(false);
                         
-                        // Restore silent preview state
+                        // Restore silent looping preview state
                         imageObj.muted = true;
                         imageObj.loop = true; 
                         imageObj.play();
                     };
 
-                    // Progress tracker
+                    // Progress tracker and End trigger
                     const duration = imageObj.duration;
                     const progressInterval = setInterval(() => {
                         if (imageObj.currentTime >= duration || imageObj.paused) {
@@ -510,8 +531,8 @@
                         clearInterval(progressInterval);
                     };
 
-                    // Start recording
-                    recorder.start();
+                    // Start recording (request data chunks every second)
+                    recorder.start(1000);
                 }
             };
 
