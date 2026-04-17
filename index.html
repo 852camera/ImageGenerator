@@ -166,13 +166,20 @@
                         cw = ch * targetRatio;
                     }
 
-                    canvas.width = Math.max(1080, Math.round(cw));
-                    canvas.height = Math.max(1350, Math.round(ch));
+                    const newW = Math.max(1080, Math.round(cw));
+                    const newH = Math.max(1350, Math.round(ch));
+                    
+                    // Only assign if different to prevent buffer wiping
+                    if (canvas.width !== newW) canvas.width = newW;
+                    if (canvas.height !== newH) canvas.height = newH;
+                    
                     w = canvas.width;
                     h = canvas.height;
                 } else {
-                    canvas.width = mWidth;
-                    canvas.height = mHeight;
+                    // Only assign if different
+                    if (canvas.width !== mWidth) canvas.width = mWidth;
+                    if (canvas.height !== mHeight) canvas.height = mHeight;
+                    
                     w = canvas.width;
                     h = canvas.height;
                 }
@@ -402,13 +409,26 @@
             useEffect(() => {
                 if (!imageObj) return;
                 
+                let intervalId;
+
                 if (mediaType === 'video') {
                     const loop = () => {
                         renderCanvas();
                         animationRef.current = requestAnimationFrame(loop);
                     };
                     animationRef.current = requestAnimationFrame(loop);
-                    return () => cancelAnimationFrame(animationRef.current);
+                    
+                    // Anti-throttling fallback: Force 30fps updates if the tab goes to the background
+                    intervalId = setInterval(() => {
+                        if (document.hidden) {
+                            renderCanvas();
+                        }
+                    }, 1000 / 30);
+
+                    return () => {
+                        cancelAnimationFrame(animationRef.current);
+                        clearInterval(intervalId);
+                    };
                 } else {
                     renderCanvas();
                 }
