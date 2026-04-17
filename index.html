@@ -426,63 +426,77 @@
                 } else if (mediaType === 'video') {
                     const canvas = canvasRef.current;
                     if (!canvas.captureStream) {
-                        alert("Your browser does not support local video export. Please use Chrome or Edge.");
+                        alert("Your browser does not support local video export.");
                         return;
                     }
 
                     setIsRecording(true);
                     setRecordingProgress(0);
 
-                    // Prep video for recording sequence
+                    // 1. Prepare video for playback
                     imageObj.pause();
                     imageObj.loop = false;
-                    imageObj.muted = false; // UNMUTE to ensure audio tracks are active
+                    imageObj.muted = false; // UNMUTE to force audio processing
                     imageObj.currentTime = 0;
-                    
-                    // Play the video briefly to initialize audio tracks before capturing stream
-                    try {
-                        await imageObj.play();
-                    } catch (err) {
-                        console.warn("Auto-play prevented", err);
+
+                    // 2. Setup Web Audio API for SILENT EXTRACTION
+                    // This intercepts the audio signal and prevents it from reaching the speakers
+                    if (!imageObj._audioCtx) {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        imageObj._audioCtx = new AudioContext();
+                        imageObj._audioSource = imageObj._audioCtx.createMediaElementSource(imageObj);
+                        imageObj._audioDest = imageObj._audioCtx.createMediaStreamDestination();
+                        
+                        // CRITICAL: We connect to the stream destination, NOT to imageObj._audioCtx.destination
+                        // This guarantees the computer speakers stay silent!
+                        imageObj._audioSource.connect(imageObj._audioDest);
                     }
 
-                    const stream = canvas.captureStream(30); // Capture at 30fps
-                    
-                    // Attempt to capture original audio and attach to stream
-                    try {
-                        const vidStream = imageObj.captureStream ? imageObj.captureStream() : imageObj.mozCaptureStream ? imageObj.mozCaptureStream() : null;
-                        if (vidStream && vidStream.getAudioTracks().length > 0) {
-                            stream.addTrack(vidStream.getAudioTracks()[0]);
-                        }
-                    } catch (e) {
-                        console.warn("Could not capture audio stream", e);
+                    if (imageObj._audioCtx.state === 'suspended') {
+                        await imageObj._audioCtx.resume();
                     }
 
-                    // Dynamically calculate bitrate: ~8Mbps for 1080p, ~35Mbps for 4K
+                    // 3. Explicitly Combine Video (Canvas) + Audio (Web Audio API Stream)
+                    const canvasStream = canvas.captureStream(30);
+                    const combinedTracks = [...canvasStream.getVideoTracks()];
+
+                    const audioTracks = imageObj._audioDest.stream.getAudioTracks();
+                    if (audioTracks.length > 0) {
+                        combinedTracks.push(audioTracks[0]);
+                    }
+
+                    const finalStream = new MediaStream(combinedTracks);
+
+                    // 4. Calculate Bitrate and Setup Recorder
                     const totalPixels = canvas.width * canvas.height;
                     const dynamicBitrate = Math.round((totalPixels / 2073600) * 8000000); 
                     const safeBitrate = Math.min(Math.max(dynamicBitrate, 5000000), 50000000);
 
-                    // Determine best supported MIME type, prioritizing MP4
                     let mimeType = 'video/webm';
                     let fileExt = 'webm';
                     
-                    if (MediaRecorder.isTypeSupported('video/mp4')) {
+                    if (MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E, mp4a.40.2"')) {
+                        mimeType = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"';
+                        fileExt = 'mp4';
+                    } else if (MediaRecorder.isTypeSupported('video/mp4')) {
                         mimeType = 'video/mp4';
                         fileExt = 'mp4';
+                    } else if (MediaRecorder.isTypeSupported('video/webm; codecs="vp8, opus"')) {
+                        mimeType = 'video/webm; codecs="vp8, opus"';
                     }
 
-                    // ADDED audioBitsPerSecond to fix buzzing/static artifacts on mobile playback
                     const recorderOptions = { 
                         videoBitsPerSecond: safeBitrate,
-                        audioBitsPerSecond: 128000, 
                         mimeType: mimeType
                     };
 
-                    const recorder = new MediaRecorder(stream, recorderOptions); 
+                    const recorder = new MediaRecorder(finalStream, recorderOptions); 
                     const chunks = [];
 
-                    recorder.ondataavailable = e => chunks.push(e.data);
+                    recorder.ondataavailable = e => {
+                        if (e.data && e.data.size > 0) chunks.push(e.data);
+                    };
+
                     recorder.onstop = () => {
                         const blob = new Blob(chunks, { type: mimeType });
                         const url = URL.createObjectURL(blob);
@@ -492,7 +506,7 @@
                         a.click();
                         setIsRecording(false);
                         
-                        // Restore silent preview state
+                        // Restore silent looping preview state
                         imageObj.muted = true;
                         imageObj.loop = true; 
                         imageObj.play();
@@ -513,8 +527,16 @@
                         clearInterval(progressInterval);
                     };
 
-                    // Start recording
-                    recorder.start();
+                    // 5. Start Recording
+                    recorder.start(1000);
+                    
+                    try {
+                        await imageObj.play();
+                    } catch (err) {
+                        console.error("Playback failed", err);
+                        setIsRecording(false);
+                        recorder.stop();
+                    }
                 }
             };
 
