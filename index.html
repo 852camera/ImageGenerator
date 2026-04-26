@@ -169,14 +169,33 @@
                     const newW = Math.max(1080, Math.round(cw));
                     const newH = Math.max(1350, Math.round(ch));
                     
-                    // Only assign if different to prevent buffer wiping
+                    if (canvas.width !== newW) canvas.width = newW;
+                    if (canvas.height !== newH) canvas.height = newH;
+                    
+                    w = canvas.width;
+                    h = canvas.height;
+                } else if (outputSize === 'ig-reel') {
+                    const targetRatio = 9 / 16;
+                    const imgRatio = mWidth / mHeight;
+                    
+                    let cw, ch;
+                    if (imgRatio > targetRatio) {
+                        cw = mWidth;
+                        ch = cw / targetRatio;
+                    } else {
+                        ch = mHeight;
+                        cw = ch * targetRatio;
+                    }
+
+                    const newW = Math.max(1080, Math.round(cw));
+                    const newH = Math.max(1920, Math.round(ch));
+                    
                     if (canvas.width !== newW) canvas.width = newW;
                     if (canvas.height !== newH) canvas.height = newH;
                     
                     w = canvas.width;
                     h = canvas.height;
                 } else {
-                    // Only assign if different
                     if (canvas.width !== mWidth) canvas.width = mWidth;
                     if (canvas.height !== mHeight) canvas.height = mHeight;
                     
@@ -189,7 +208,7 @@
                 ctx.clearRect(0, 0, w, h);
 
                 // 2. Draw Media
-                if (outputSize === 'ig') {
+                if (outputSize === 'ig' || outputSize === 'ig-reel') {
                     ctx.fillStyle = 'white';
                     ctx.fillRect(0, 0, w, h);
 
@@ -209,34 +228,47 @@
                 }
 
                 // 3. Text Scaling & Dimensions
-                const textMarginX = imgW * 0.025; 
-                const primaryFontSize = imgW * 0.036 * fontScale;
-                const secondaryFontSize = imgW * 0.028 * fontScale;
-                const lineSpacing = imgW * 0.01 * fontScale;
+                const isReel = outputSize === 'ig-reel';
+                const refW = isReel ? w : imgW;
+                const textMarginX = isReel ? 75 * (w / 1080) : imgW * 0.025; 
+                const primaryFontSize = refW * 0.036 * fontScale;
+                const secondaryFontSize = refW * 0.028 * fontScale;
+                const lineSpacing = refW * 0.01 * fontScale;
                 const totalTextHeight = primaryFontSize + secondaryFontSize + (optionalText ? secondaryFontSize + lineSpacing : 0) + lineSpacing;
-                const paddingY = imgW * 0.02 * fontScale;
+                const paddingY = refW * 0.02 * fontScale;
                 
                 const barHeight = totalTextHeight + paddingY * 2;
-                const barY = imgY + imgH - barHeight;
+                
+                let barX = imgX;
+                let barY = imgY + imgH - barHeight;
+                let barW = imgW;
+
+                if (isReel) {
+                    const pad = 75 * (w / 1080);
+                    barX = 0; // Span full width for reels
+                    barY = h - pad - barHeight; // Pad strictly from canvas bottom
+                    barW = w;
+                }
 
                 // 4. Draw Overlay Bar
-                const barGrad = ctx.createLinearGradient(imgX, barY, imgX + imgW, barY);
+                const barGrad = ctx.createLinearGradient(barX, barY, barX + barW, barY);
                 barGrad.addColorStop(0, '#0F305D'); 
                 barGrad.addColorStop(0.6, 'rgba(15, 48, 93, 0.9)'); 
                 barGrad.addColorStop(0.75, 'rgba(15, 48, 93, 0.6)');
                 barGrad.addColorStop(0.95, 'rgba(15, 48, 93, 0)');   
                 
                 ctx.fillStyle = barGrad;
-                ctx.fillRect(imgX, barY, imgW, barHeight);
+                ctx.fillRect(barX, barY, barW, barHeight);
 
                 // 5. Text Elements
                 ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.7)';
-                ctx.shadowBlur = isRecording ? 0 : imgW * 0.005;
-                ctx.shadowOffsetX = isRecording ? 0 : imgW * 0.001;
-                ctx.shadowOffsetY = isRecording ? 0 : imgW * 0.001;
+                ctx.shadowBlur = isRecording ? 0 : refW * 0.005;
+                ctx.shadowOffsetX = isRecording ? 0 : refW * 0.001;
+                ctx.shadowOffsetY = isRecording ? 0 : refW * 0.001;
 
                 ctx.textAlign = 'left';
                 let currentY = barY + paddingY + primaryFontSize * 0.85; 
+                const textDrawX = isReel ? textMarginX : imgX + textMarginX;
                 
                 ctx.font = `900 ${primaryFontSize}px ${fontFamily}`;
                 ctx.fillStyle = 'white';
@@ -247,16 +279,16 @@
                 } else if (camera || lens) {
                     equipmentText += camera || lens;
                 }
-                ctx.fillText(equipmentText, imgX + textMarginX, currentY);
+                ctx.fillText(equipmentText, textDrawX, currentY);
 
                 currentY += secondaryFontSize + lineSpacing;
                 ctx.font = `400 ${secondaryFontSize}px ${fontFamily}`; 
                 const locationDisplay = [venue, seating].filter(Boolean).join(' | ');
-                ctx.fillText(locationDisplay, imgX + textMarginX, currentY);
+                ctx.fillText(locationDisplay, textDrawX, currentY);
 
                 if (optionalText) {
                     currentY += secondaryFontSize + lineSpacing;
-                    ctx.fillText(optionalText, imgX + textMarginX, currentY);
+                    ctx.fillText(optionalText, textDrawX, currentY);
                 }
 
                 ctx.shadowColor = 'transparent';
@@ -266,8 +298,8 @@
 
                 // 6. Draw Logo
                 if (logoObj) {
-                    const logoMaxW = imgW * 0.25; 
-                    const logoMaxH = imgW * 0.08; 
+                    const logoMaxW = refW * 0.25; 
+                    const logoMaxH = refW * 0.08; 
                     
                     let logoW = logoObj.width;
                     let logoH = logoObj.height;
@@ -276,11 +308,18 @@
                     logoW = logoW * scale;
                     logoH = logoH * scale;
 
-                    const logoX = logoPosition === 'top-left' ? imgX + textMarginX : imgX + imgW - logoW - textMarginX;
-                    const logoY = imgY + imgW * 0.03; 
+                    let logoX, logoY;
+                    if (isReel) {
+                        const pad = 75 * (w / 1080);
+                        logoX = logoPosition === 'top-left' ? pad : w - logoW - pad;
+                        logoY = pad;
+                    } else {
+                        logoX = logoPosition === 'top-left' ? imgX + textMarginX : imgX + imgW - logoW - textMarginX;
+                        logoY = imgY + imgW * 0.03; 
+                    }
 
                     ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.3)';
-                    ctx.shadowBlur = isRecording ? 0 : imgW * 0.01;
+                    ctx.shadowBlur = isRecording ? 0 : refW * 0.01;
                     ctx.drawImage(logoObj, logoX, logoY, logoW, logoH);
                     ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
@@ -288,8 +327,8 @@
 
                 // 7. Draw Seating Plan
                 if (seatingPlanObj) {
-                    const spMaxW = imgW * 0.25; 
-                    const spMaxH = imgH * 0.20; 
+                    const spMaxW = refW * 0.25; 
+                    const spMaxH = (isReel ? h : imgH) * 0.20; 
                     
                     let spW = seatingPlanObj.width;
                     let spH = seatingPlanObj.height;
@@ -298,12 +337,19 @@
                     spW = spW * spScale;
                     spH = spH * spScale;
 
-                    const spX = imgX + imgW - spW - textMarginX;
-                    const spY = imgY + imgH - spH - paddingY; 
+                    let spX, spY;
+                    if (isReel) {
+                        const pad = 75 * (w / 1080);
+                        spX = w - spW - pad;
+                        spY = h - spH - pad;
+                    } else {
+                        spX = imgX + imgW - spW - textMarginX;
+                        spY = imgY + imgH - spH - paddingY; 
+                    }
 
                     ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.5)';
-                    ctx.shadowBlur = isRecording ? 0 : imgW * 0.008;
-                    ctx.lineWidth = imgW * 0.002;
+                    ctx.shadowBlur = isRecording ? 0 : refW * 0.008;
+                    ctx.lineWidth = refW * 0.002;
                     ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; 
                     ctx.drawImage(seatingPlanObj, spX, spY, spW, spH);
                     ctx.strokeRect(spX, spY, spW, spH);
@@ -315,10 +361,10 @@
                         ctx.save();
                         ctx.translate(pinX, pinY);
                         ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.6)';
-                        ctx.shadowBlur = isRecording ? 0 : imgW * 0.005;
-                        ctx.shadowOffsetY = isRecording ? 0 : imgW * 0.002;
+                        ctx.shadowBlur = isRecording ? 0 : refW * 0.005;
+                        ctx.shadowOffsetY = isRecording ? 0 : refW * 0.002;
                         
-                        const pinScale = imgW * 0.0018; 
+                        const pinScale = refW * 0.0018; 
                         ctx.scale(pinScale, pinScale);
                         ctx.translate(-12, -22); 
                         
@@ -336,8 +382,8 @@
 
                 // 8. Draw Sharpness Zoom
                 if (enableZoom && mainImagePin) {
-                    const insetSize = imgW * zoomSize; 
-                    const baseCropReference = imgW * 0.25; 
+                    const insetSize = refW * zoomSize; 
+                    const baseCropReference = refW * 0.25; 
                     
                     const px = mainImagePin.x * mWidth;
                     const py = mainImagePin.y * mHeight;
@@ -354,24 +400,27 @@
                     if (sy + sHeight > mHeight) sy = mHeight - sHeight;
 
                     let dx, dy;
-                    const padding = imgW * 0.03;
+                    const padding = isReel ? 75 * (w / 1080) : imgW * 0.03;
+                    const boundX = isReel ? 0 : imgX;
+                    const boundY = isReel ? 0 : imgY;
+                    const boundW = isReel ? w : imgW;
                     
                     switch (zoomPosition) {
-                        case 'top-left': dx = imgX + padding; dy = imgY + padding; break;
-                        case 'top-right': dx = imgX + imgW - insetSize - padding; dy = imgY + padding; break;
-                        case 'bottom-left': dx = imgX + padding; dy = barY - insetSize - padding; break;
-                        case 'bottom-right': dx = imgX + imgW - insetSize - padding; dy = barY - insetSize - padding; break;
-                        default: dx = imgX + padding; dy = imgY + padding;
+                        case 'top-left': dx = boundX + padding; dy = boundY + padding; break;
+                        case 'top-right': dx = boundX + boundW - insetSize - padding; dy = boundY + padding; break;
+                        case 'bottom-left': dx = boundX + padding; dy = barY - insetSize - padding; break;
+                        case 'bottom-right': dx = boundX + boundW - insetSize - padding; dy = barY - insetSize - padding; break;
+                        default: dx = boundX + padding; dy = boundY + padding;
                     }
 
                     if (logoObj) {
-                        const logoMaxH = imgW * 0.08;
+                        const logoMaxH = refW * 0.08;
                         if (zoomPosition === 'top-right' && logoPosition === 'top-right') dy += logoMaxH + padding;
                         else if (zoomPosition === 'top-left' && logoPosition === 'top-left') dy += logoMaxH + padding;
                     }
                     
                     if (seatingPlanObj && zoomPosition === 'bottom-right') {
-                        const spMaxH = imgH * 0.20;
+                        const spMaxH = (isReel ? h : imgH) * 0.20;
                         dy -= spMaxH + padding;
                     }
 
@@ -380,8 +429,8 @@
                     ctx.arc(dx + insetSize/2, dy + insetSize/2, insetSize/2, 0, Math.PI * 2);
                     
                     ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.6)';
-                    ctx.shadowBlur = isRecording ? 0 : imgW * 0.015;
-                    ctx.shadowOffsetY = isRecording ? 0 : imgW * 0.005;
+                    ctx.shadowBlur = isRecording ? 0 : refW * 0.015;
+                    ctx.shadowOffsetY = isRecording ? 0 : refW * 0.005;
                     ctx.fillStyle = 'white';
                     ctx.fill();
                     
@@ -389,17 +438,17 @@
                     ctx.drawImage(imageObj, sx, sy, sWidth, sHeight, dx, dy, insetSize, insetSize);
                     
                     ctx.shadowColor = 'transparent';
-                    ctx.lineWidth = imgW * 0.006;
+                    ctx.lineWidth = refW * 0.006;
                     ctx.strokeStyle = 'white';
                     ctx.stroke();
                     ctx.restore();
                     
-                    ctx.font = `800 ${imgW * 0.016}px ${fontFamily}`;
+                    ctx.font = `800 ${refW * 0.016}px ${fontFamily}`;
                     ctx.fillStyle = 'white';
                     ctx.textAlign = 'center';
                     ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.8)';
-                    ctx.shadowBlur = isRecording ? 0 : imgW * 0.005;
-                    ctx.fillText(`${zoomLevel}x ZOOM`, dx + insetSize/2, dy + insetSize + imgW * 0.025);
+                    ctx.shadowBlur = isRecording ? 0 : refW * 0.005;
+                    ctx.fillText(`${zoomLevel}x ZOOM`, dx + insetSize/2, dy + insetSize + refW * 0.025);
                     ctx.shadowColor = 'transparent';
                 }
             }, [imageObj, logoObj, seatingPlanObj, pinPosition, mainImagePin, enableZoom, zoomLevel, zoomSize, zoomPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale, logoPosition, isRecording]);
@@ -595,6 +644,7 @@
                                             className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                         >
                                             <option value="ig">Instagram 4:5 (Original Res)</option>
+                                            <option value="ig-reel">IG Reels 9:16 (Safe Zone)</option>
                                             <option value="original">Original Image Size</option>
                                         </select>
                                     </div>
