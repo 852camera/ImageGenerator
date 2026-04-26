@@ -199,8 +199,8 @@
                     imgX = (w - imgW) / 2;
                     imgY = (h - imgH) / 2;
                     
-                    ctx.shadowColor = 'rgba(0,0,0,0.15)';
-                    ctx.shadowBlur = w * 0.025;
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.15)';
+                    ctx.shadowBlur = isRecording ? 0 : w * 0.025;
                     ctx.drawImage(imageObj, imgX, imgY, imgW, imgH);
                     ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
@@ -230,10 +230,10 @@
                 ctx.fillRect(imgX, barY, imgW, barHeight);
 
                 // 5. Text Elements
-                ctx.shadowColor = 'rgba(0,0,0,0.7)';
-                ctx.shadowBlur = imgW * 0.005;
-                ctx.shadowOffsetX = imgW * 0.001;
-                ctx.shadowOffsetY = imgW * 0.001;
+                ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.7)';
+                ctx.shadowBlur = isRecording ? 0 : imgW * 0.005;
+                ctx.shadowOffsetX = isRecording ? 0 : imgW * 0.001;
+                ctx.shadowOffsetY = isRecording ? 0 : imgW * 0.001;
 
                 ctx.textAlign = 'left';
                 let currentY = barY + paddingY + primaryFontSize * 0.85; 
@@ -279,8 +279,8 @@
                     const logoX = logoPosition === 'top-left' ? imgX + textMarginX : imgX + imgW - logoW - textMarginX;
                     const logoY = imgY + imgW * 0.03; 
 
-                    ctx.shadowColor = 'rgba(0,0,0,0.3)';
-                    ctx.shadowBlur = imgW * 0.01;
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.3)';
+                    ctx.shadowBlur = isRecording ? 0 : imgW * 0.01;
                     ctx.drawImage(logoObj, logoX, logoY, logoW, logoH);
                     ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
@@ -301,11 +301,10 @@
                     const spX = imgX + imgW - spW - textMarginX;
                     const spY = imgY + imgH - spH - paddingY; 
 
-                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                    ctx.shadowBlur = imgW * 0.008;
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.5)';
+                    ctx.shadowBlur = isRecording ? 0 : imgW * 0.008;
                     ctx.lineWidth = imgW * 0.002;
                     ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; 
-                    
                     ctx.drawImage(seatingPlanObj, spX, spY, spW, spH);
                     ctx.strokeRect(spX, spY, spW, spH);
                     
@@ -315,9 +314,9 @@
                         
                         ctx.save();
                         ctx.translate(pinX, pinY);
-                        ctx.shadowColor = 'rgba(0,0,0,0.6)';
-                        ctx.shadowBlur = imgW * 0.005;
-                        ctx.shadowOffsetY = imgW * 0.002;
+                        ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.6)';
+                        ctx.shadowBlur = isRecording ? 0 : imgW * 0.005;
+                        ctx.shadowOffsetY = isRecording ? 0 : imgW * 0.002;
                         
                         const pinScale = imgW * 0.0018; 
                         ctx.scale(pinScale, pinScale);
@@ -380,11 +379,11 @@
                     ctx.beginPath();
                     ctx.arc(dx + insetSize/2, dy + insetSize/2, insetSize/2, 0, Math.PI * 2);
                     
-                    ctx.shadowColor = 'rgba(0,0,0,0.6)';
-                    ctx.shadowBlur = imgW * 0.015;
-                    ctx.shadowOffsetY = imgW * 0.005;
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.6)';
+                    ctx.shadowBlur = isRecording ? 0 : imgW * 0.015;
+                    ctx.shadowOffsetY = isRecording ? 0 : imgW * 0.005;
                     ctx.fillStyle = 'white';
-                    ctx.fill(); 
+                    ctx.fill();
                     
                     ctx.clip();
                     ctx.drawImage(imageObj, sx, sy, sWidth, sHeight, dx, dy, insetSize, insetSize);
@@ -398,12 +397,12 @@
                     ctx.font = `800 ${imgW * 0.016}px ${fontFamily}`;
                     ctx.fillStyle = 'white';
                     ctx.textAlign = 'center';
-                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-                    ctx.shadowBlur = imgW * 0.005;
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.8)';
+                    ctx.shadowBlur = isRecording ? 0 : imgW * 0.005;
                     ctx.fillText(`${zoomLevel}x ZOOM`, dx + insetSize/2, dy + insetSize + imgW * 0.025);
                     ctx.shadowColor = 'transparent';
                 }
-            }, [imageObj, logoObj, seatingPlanObj, pinPosition, mainImagePin, enableZoom, zoomLevel, zoomSize, zoomPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale, logoPosition]);
+            }, [imageObj, logoObj, seatingPlanObj, pinPosition, mainImagePin, enableZoom, zoomLevel, zoomSize, zoomPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale, logoPosition, isRecording]);
 
             // Setup Render Loop
             useEffect(() => {
@@ -423,7 +422,7 @@
                         if (document.hidden) {
                             renderCanvas();
                         }
-                    }, 1000 / 30);
+                    }, 1000 / 60);
 
                     return () => {
                         cancelAnimationFrame(animationRef.current);
@@ -477,7 +476,7 @@
                     }
 
                     // 3. Explicitly Combine Video (Canvas) + Audio (Web Audio API Stream)
-                    const canvasStream = canvas.captureStream(30);
+                    const canvasStream = canvas.captureStream(60);
                     const combinedTracks = [...canvasStream.getVideoTracks()];
 
                     const audioTracks = imageObj._audioDest.stream.getAudioTracks();
@@ -489,8 +488,8 @@
 
                     // 4. Calculate Bitrate and Setup Recorder
                     const totalPixels = canvas.width * canvas.height;
-                    const dynamicBitrate = Math.round((totalPixels / 2073600) * 8000000); 
-                    const safeBitrate = Math.min(Math.max(dynamicBitrate, 5000000), 50000000);
+                    const dynamicBitrate = Math.round((totalPixels / 2073600) * 12000000); 
+                    const safeBitrate = Math.min(Math.max(dynamicBitrate, 8000000), 80000000);
 
                     let mimeType = 'video/webm';
                     let fileExt = 'webm';
