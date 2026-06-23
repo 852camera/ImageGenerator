@@ -43,6 +43,7 @@
             const [mainImagePin, setMainImagePin] = useState(null);
             const [isRecording, setIsRecording] = useState(false);
             const [recordingProgress, setRecordingProgress] = useState(0);
+            const [copied, setCopied] = useState(false);
             
             // UI states
             const [outputSize, setOutputSize] = useState('ig');
@@ -55,6 +56,7 @@
             const [zoomSize, setZoomSize] = useState(0.25); 
 
             // Text content states
+            const [eventName, setEventName] = useState('2026 KISS OF LIFE ASIA FANMEETING TOUR <DEJA VU> IN TAIPEI');
             const [camera, setCamera] = useState('Canon R7');
             const [lens, setLens] = useState('RF100500');
             const [venue, setVenue] = useState('Kai Tak Arena');
@@ -482,6 +484,20 @@
                 }
             }, [renderCanvas, mediaType, imageObj]);
 
+            // Construct caption derived variable
+            const getGeneratedCaption = () => {
+                const equipmentText = camera && lens ? `${camera} ＋ ${lens}` : (camera || lens || '');
+                const locationText = [venue, seating].filter(Boolean).join(' | ');
+                
+                return `客人回圖:\n【 ${eventName || '活動名稱'} 】\n\n📸 拍攝器材：\n👉 ${equipmentText}\n\n📍 捕捉位置 ：\n👉 ${locationText}`;
+            };
+
+            const copyCaptionToClipboard = () => {
+                navigator.clipboard.writeText(getGeneratedCaption());
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            };
+
             const downloadMedia = async () => {
                 if (!canvasRef.current || !imageObj) return;
 
@@ -508,15 +524,12 @@
                     imageObj.currentTime = 0;
 
                     // 2. Setup Web Audio API for SILENT EXTRACTION
-                    // This intercepts the audio signal and prevents it from reaching the speakers
                     if (!imageObj._audioCtx) {
                         const AudioContext = window.AudioContext || window.webkitAudioContext;
                         imageObj._audioCtx = new AudioContext();
                         imageObj._audioSource = imageObj._audioCtx.createMediaElementSource(imageObj);
                         imageObj._audioDest = imageObj._audioCtx.createMediaStreamDestination();
                         
-                        // CRITICAL: We connect to the stream destination, NOT to imageObj._audioCtx.destination
-                        // This guarantees the computer speakers stay silent!
                         imageObj._audioSource.connect(imageObj._audioDest);
                     }
 
@@ -694,6 +707,15 @@
                             <div>
                                 <h2 className="text-lg font-semibold text-white mb-3">2. Content Details</h2>
                                 <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-1">Event / Tour Title (活動名稱)</label>
+                                        <input 
+                                            type="text" 
+                                            value={eventName} 
+                                            onChange={(e) => setEventName(e.target.value)}
+                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                        />
+                                    </div>
                                     <div className="flex gap-2">
                                         <div className="flex-1">
                                             <label className="block text-xs text-gray-400 mb-1">Camera (相機)</label>
@@ -876,6 +898,26 @@
                                             </div>
                                         </div>
                                     )}
+                                </div>
+                            </div>
+
+                            <hr className="border-gray-700" />
+
+                            {/* SECTION 5: Instagram Caption Generator */}
+                            <div>
+                                <h2 className="text-lg font-semibold text-white mb-3">5. Instagram Caption</h2>
+                                <div className="space-y-3 bg-gray-900 p-3 rounded-lg border border-gray-700">
+                                    <textarea
+                                        readOnly
+                                        value={getGeneratedCaption()}
+                                        className="w-full h-44 bg-gray-950 border border-gray-800 rounded p-2 text-xs text-gray-300 font-mono resize-none focus:outline-none"
+                                    />
+                                    <button
+                                        onClick={copyCaptionToClipboard}
+                                        className={`w-full py-2 rounded font-bold text-sm transition shadow flex justify-center items-center ${copied ? 'bg-blue-600 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                                    >
+                                        {copied ? 'Copied Context! ✓' : 'Copy Caption'}
+                                    </button>
                                 </div>
                             </div>
 
