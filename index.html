@@ -1,25 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-HK">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo Watermark Studio</title>
+    <title>Photo & Video Watermark Studio Pro</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        studio: {
+                            bg: '#0F1117',
+                            card: '#1A1D26',
+                            border: '#2A2E3D',
+                            accent: '#3B82F6'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- React & Babel UMD -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.23.0/babel.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,700;0,900;1,900&family=Noto+Sans+TC:wght@400;700;900&family=Noto+Serif+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- QR Code Generator Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
     
     <style>
-        body { font-family: sans-serif; background-color: #111827; color: white; }
-        .canvas-container {
-            background: #1f2937;
-            background-image: linear-gradient(45deg, #374151 25%, transparent 25%), 
-                              linear-gradient(-45deg, #374151 25%, transparent 25%), 
-                              linear-gradient(45deg, transparent 75%, #374151 75%), 
-                              linear-gradient(-45deg, transparent 75%, #374151 75%);
+        body { 
+            font-family: 'Inter', 'Noto Sans TC', sans-serif; 
+            background-color: #0F1117; 
+            color: #E5E7EB;
+        }
+
+        /* Canvas Background Checkerboard */
+        .canvas-viewport {
+            background-color: #181B22;
+            background-image: 
+                radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0);
             background-size: 20px 20px;
-            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            background-position: -10px -10px;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0F1117;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2A2E3D;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3B4054;
+        }
+
+        .studio-card {
+            background: rgba(26, 29, 38, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .studio-input {
+            background: rgba(15, 17, 23, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            transition: all 0.15s ease-in-out;
+        }
+        .studio-input:focus {
+            border-color: #3B82F6;
+            outline: none;
         }
     </style>
 </head>
@@ -29,33 +87,62 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
 
+        // Canvas Rounded Rectangle Helper
+        const drawRoundedRect = (ctx, x, y, width, height, radius) => {
+            const r = Math.min(radius, width / 2, height / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + width - r, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+            ctx.lineTo(x + width, y + height - r);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+            ctx.lineTo(x + r, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        };
+
         const App = () => {
-            // Media states
+            // Media States
             const [imageObj, setImageObj] = useState(null);
-            const [mediaType, setMediaType] = useState('image'); // 'image' or 'video'
+            const [mediaType, setMediaType] = useState('image');
             const [logoObj, setLogoObj] = useState(null);
             const [seatingPlanObj, setSeatingPlanObj] = useState(null);
             const [seatingPlanSrc, setSeatingPlanSrc] = useState(null);
             const [imageSrc, setImageSrc] = useState(null);
             
-            // Interaction & Export states
+            // Interactive States
             const [pinPosition, setPinPosition] = useState(null);
             const [mainImagePin, setMainImagePin] = useState(null);
             const [isRecording, setIsRecording] = useState(false);
             const [recordingProgress, setRecordingProgress] = useState(0);
             const [copied, setCopied] = useState(false);
+            const [showSafeZone, setShowSafeZone] = useState(false);
             
-            // UI states
+            // Customization Options
             const [outputSize, setOutputSize] = useState('ig');
+            const [backgroundStyle, setBackgroundStyle] = useState('blur'); // 'blur', 'dark', 'white'
             const [fontFamily, setFontFamily] = useState("'Noto Sans TC', sans-serif");
             const [fontScale, setFontScale] = useState(1);
             const [logoPosition, setLogoPosition] = useState('top-right');
+            const barColorStart = '#102e5a'; // Symphonic Blue
+            
+            // Sharpness Zoom States
             const [enableZoom, setEnableZoom] = useState(false);
             const [zoomLevel, setZoomLevel] = useState(2); 
             const [zoomPosition, setZoomPosition] = useState('top-left');
-            const [zoomSize, setZoomSize] = useState(0.25); 
+            const [zoomSize, setZoomSize] = useState(0.24); 
 
-            // Text content states
+            // Standalone Floating QR Code States
+            const [enableQr, setEnableQr] = useState(true);
+            const [qrUrl, setQrUrl] = useState('https://example.com/rental');
+            const [qrText, setQrText] = useState('立刻租借');
+            const [qrPosition, setQrPosition] = useState('top-right');
+            const [qrSize, setQrSize] = useState(0.14); 
+            const [qrObj, setQrObj] = useState(null);
+
+            // Watermark Content
             const [eventName, setEventName] = useState('2026 KISS OF LIFE ASIA FANMEETING TOUR <DEJA VU> IN TAIPEI');
             const [camera, setCamera] = useState('Canon R7');
             const [lens, setLens] = useState('RF100500');
@@ -66,42 +153,83 @@
             const canvasRef = useRef(null);
             const animationRef = useRef(null);
 
-            // Load hardcoded logo on initial render
+            // Load default logo on init
             useEffect(() => {
                 const img = new Image();
                 img.onload = () => setLogoObj(img);
+                img.onerror = () => console.log('Default logo.jpg not present.');
                 img.src = 'logo.jpg'; 
             }, []);
 
-            // Handle main media upload
-            const handleMediaUpload = (e) => {
+            // Generate QR Code Image Object
+            useEffect(() => {
+                if (!enableQr || !qrUrl) {
+                    setQrObj(null);
+                    return;
+                }
+                try {
+                    const qr = new QRious({
+                        value: qrUrl,
+                        size: 300,
+                        level: 'H'
+                    });
+                    const img = new Image();
+                    img.onload = () => setQrObj(img);
+                    img.src = qr.toDataURL();
+                } catch (err) {
+                    console.error("QR Code Error:", err);
+                }
+            }, [enableQr, qrUrl]);
+
+            const handleLogoUpload = (e) => {
                 const file = e.target.files[0];
                 if (file) {
-                    const isVid = file.type.startsWith('video/');
-                    setMediaType(isVid ? 'video' : 'image');
-                    const url = URL.createObjectURL(file);
-                    setImageSrc(url);
-
-                    if (isVid) {
-                        const vid = document.createElement('video');
-                        vid.src = url;
-                        vid.muted = true; // Auto-play policies require muted
-                        vid.loop = true;
-                        vid.playsInline = true;
-                        vid.crossOrigin = "anonymous";
-                        
-                        vid.style.display = 'none';
-                        document.body.appendChild(vid);
-                        
-                        vid.onloadeddata = () => {
-                            setImageObj(vid);
-                            vid.play();
-                        };
-                    } else {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
                         const img = new Image();
-                        img.onload = () => setImageObj(img);
-                        img.src = url;
-                    }
+                        img.onload = () => setLogoObj(img);
+                        img.src = ev.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const handleMediaUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (imageSrc) URL.revokeObjectURL(imageSrc);
+
+                if (imageObj && imageObj.tagName === 'VIDEO') {
+                    imageObj.pause();
+                    imageObj.src = '';
+                    imageObj.load();
+                    imageObj.remove();
+                }
+
+                const isVid = file.type.startsWith('video/');
+                setMediaType(isVid ? 'video' : 'image');
+                const url = URL.createObjectURL(file);
+                setImageSrc(url);
+
+                if (isVid) {
+                    const vid = document.createElement('video');
+                    vid.src = url;
+                    vid.muted = true;
+                    vid.loop = true;
+                    vid.playsInline = true;
+                    vid.crossOrigin = "anonymous";
+                    vid.style.display = 'none';
+                    document.body.appendChild(vid);
+                    
+                    vid.onloadeddata = () => {
+                        setImageObj(vid);
+                        vid.play();
+                    };
+                } else {
+                    const img = new Image();
+                    img.onload = () => setImageObj(img);
+                    img.src = url;
                 }
             };
 
@@ -126,93 +254,108 @@
                 setPinPosition({ x, y });
             };
 
-            const handleMainImageClick = (e) => {
-                const rect = e.target.getBoundingClientRect();
-                const x = (e.clientX - rect.left) / rect.width;
-                const y = (e.clientY - rect.top) / rect.height;
-                setMainImagePin({ x, y });
-            };
-
             const clearSeatingPlan = () => {
                 setSeatingPlanObj(null);
                 setSeatingPlanSrc(null);
                 setPinPosition(null);
             };
 
-            // Master render function
+            const handleCanvasClick = (e) => {
+                if (!canvasRef.current || !imageObj || !enableZoom) return;
+
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
+                const clickY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+                const mWidth = imageObj.videoWidth || imageObj.width;
+                const mHeight = imageObj.videoHeight || imageObj.height;
+
+                let imgX = 0, imgY = 0, imgW = canvas.width, imgH = canvas.height;
+
+                if (outputSize === 'ig' || outputSize === 'ig-reel') {
+                    const scaleFit = Math.min(canvas.width / mWidth, canvas.height / mHeight);
+                    imgW = mWidth * scaleFit;
+                    imgH = mHeight * scaleFit;
+                    imgX = (canvas.width - imgW) / 2;
+                    imgY = (canvas.height - imgH) / 2;
+                }
+
+                if (clickX >= imgX && clickX <= imgX + imgW && clickY >= imgY && clickY <= imgY + imgH) {
+                    const relativeX = (clickX - imgX) / imgW;
+                    const relativeY = (clickY - imgY) / imgH;
+                    setMainImagePin({ x: relativeX, y: relativeY });
+                }
+            };
+
+            const hexToRgba = (hex, alpha) => {
+                let c = hex.replace('#', '');
+                if (c.length === 3) c = c.split('').map(x => x + x).join('');
+                const num = parseInt(c, 16);
+                return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+            };
+
+            // Master Canvas Render Engine
             const renderCanvas = useCallback(() => {
                 if (!imageObj || !canvasRef.current) return;
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
                 
-                // Unify dimensions between Image and Video elements
                 const mWidth = imageObj.videoWidth || imageObj.width;
                 const mHeight = imageObj.videoHeight || imageObj.height;
-                
-                if (!mWidth || !mHeight) return; // Prevent rendering before video metadata loads
+                if (!mWidth || !mHeight) return;
 
                 let w, h;
                 let imgX = 0, imgY = 0, imgW, imgH;
 
-                // 1. Determine Canvas Size
+                // 1. Calculate Canvas Aspect Ratio
                 if (outputSize === 'ig') {
                     const targetRatio = 4 / 5;
                     const imgRatio = mWidth / mHeight;
-                    
-                    let cw, ch;
-                    if (imgRatio > targetRatio) {
-                        cw = mWidth;
-                        ch = cw / targetRatio;
-                    } else {
-                        ch = mHeight;
-                        cw = ch * targetRatio;
-                    }
+                    let cw = imgRatio > targetRatio ? mWidth : mHeight * targetRatio;
+                    let ch = imgRatio > targetRatio ? mWidth / targetRatio : mHeight;
 
-                    const newW = Math.max(1080, Math.round(cw));
-                    const newH = Math.max(1350, Math.round(ch));
-                    
-                    if (canvas.width !== newW) canvas.width = newW;
-                    if (canvas.height !== newH) canvas.height = newH;
-                    
-                    w = canvas.width;
-                    h = canvas.height;
+                    canvas.width = Math.max(1080, Math.round(cw));
+                    canvas.height = Math.max(1350, Math.round(ch));
                 } else if (outputSize === 'ig-reel') {
                     const targetRatio = 9 / 16;
                     const imgRatio = mWidth / mHeight;
-                    
-                    let cw, ch;
-                    if (imgRatio > targetRatio) {
-                        cw = mWidth;
-                        ch = cw / targetRatio;
-                    } else {
-                        ch = mHeight;
-                        cw = ch * targetRatio;
-                    }
+                    let cw = imgRatio > targetRatio ? mWidth : mHeight * targetRatio;
+                    let ch = imgRatio > targetRatio ? mWidth / targetRatio : mHeight;
 
-                    const newW = Math.max(1080, Math.round(cw));
-                    const newH = Math.max(1920, Math.round(ch));
-                    
-                    if (canvas.width !== newW) canvas.width = newW;
-                    if (canvas.height !== newH) canvas.height = newH;
-                    
-                    w = canvas.width;
-                    h = canvas.height;
+                    canvas.width = Math.max(1080, Math.round(cw));
+                    canvas.height = Math.max(1920, Math.round(ch));
                 } else {
-                    if (canvas.width !== mWidth) canvas.width = mWidth;
-                    if (canvas.height !== mHeight) canvas.height = mHeight;
-                    
-                    w = canvas.width;
-                    h = canvas.height;
+                    canvas.width = mWidth;
+                    canvas.height = mHeight;
                 }
 
-                imgW = w;
-                imgH = h;
+                w = canvas.width;
+                h = canvas.height;
+
+                ctx.save();
                 ctx.clearRect(0, 0, w, h);
 
-                // 2. Draw Media
+                // 2. Draw Natural Blending Canvas Background Fill
                 if (outputSize === 'ig' || outputSize === 'ig-reel') {
-                    ctx.fillStyle = 'white';
-                    ctx.fillRect(0, 0, w, h);
+                    if (backgroundStyle === 'blur') {
+                        ctx.save();
+                        ctx.filter = 'blur(45px) brightness(0.65)';
+                        const coverScale = Math.max(w / mWidth, h / mHeight);
+                        const bgW = mWidth * coverScale;
+                        const bgH = mHeight * coverScale;
+                        ctx.drawImage(imageObj, (w - bgW) / 2, (h - bgH) / 2, bgW, bgH);
+                        ctx.restore();
+
+                        ctx.fillStyle = 'rgba(10, 14, 23, 0.25)';
+                        ctx.fillRect(0, 0, w, h);
+                    } else if (backgroundStyle === 'dark') {
+                        ctx.fillStyle = '#0B1323';
+                        ctx.fillRect(0, 0, w, h);
+                    } else {
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, w, h);
+                    }
 
                     const scaleFit = Math.min(w / mWidth, h / mHeight);
                     imgW = mWidth * scaleFit;
@@ -220,89 +363,184 @@
                     imgX = (w - imgW) / 2;
                     imgY = (h - imgH) / 2;
                     
-                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.15)';
-                    ctx.shadowBlur = isRecording ? 0 : w * 0.025;
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.35)';
+                    ctx.shadowBlur = isRecording ? 0 : w * 0.02;
+                    ctx.shadowOffsetY = isRecording ? 0 : w * 0.006;
                     ctx.drawImage(imageObj, imgX, imgY, imgW, imgH);
                     ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
+                    ctx.shadowOffsetY = 0;
                 } else {
+                    imgW = w; imgH = h;
                     ctx.drawImage(imageObj, 0, 0, w, h);
                 }
 
-                // 3. Text Scaling & Dimensions
                 const isReel = outputSize === 'ig-reel';
                 const refW = isReel ? w : imgW;
-                const textMarginX = isReel ? 75 * (w / 1080) : imgW * 0.025; 
-                const primaryFontSize = refW * 0.036 * fontScale;
-                const secondaryFontSize = refW * 0.028 * fontScale;
-                const lineSpacing = refW * 0.01 * fontScale;
-                const totalTextHeight = primaryFontSize + secondaryFontSize + (optionalText ? secondaryFontSize + lineSpacing : 0) + lineSpacing;
-                const paddingY = refW * 0.02 * fontScale;
+
+                // 3. Overlay Box Settings (Symphonic Blue #102e5a)
+                const cardMargin = refW * 0.025;
+                const paddingX = refW * 0.035;
+                const paddingY = refW * 0.022;
+
+                const titleFontSize = refW * 0.028 * fontScale;
+                const infoFontSize = refW * 0.022 * fontScale;
+                const lineSpacing = refW * 0.006 * fontScale;
+
+                let totalTextHeight = 0;
+                if (eventName) totalTextHeight += titleFontSize;
                 
-                const barHeight = totalTextHeight + paddingY * 2;
-                
-                let barX = imgX;
-                let barY = imgY + imgH - barHeight;
-                let barW = imgW;
+                const equipmentText = (camera && lens) ? `${camera} + ${lens}` : (camera || lens || '');
+                if (equipmentText) totalTextHeight += (eventName ? lineSpacing * 1.5 : 0) + infoFontSize;
 
-                if (isReel) {
-                    const pad = 75 * (w / 1080);
-                    barX = 0; // Span full width for reels
-                    barY = h - pad - barHeight; // Pad strictly from canvas bottom
-                    barW = w;
-                }
-
-                // 4. Draw Overlay Bar
-                const barGrad = ctx.createLinearGradient(barX, barY, barX + barW, barY);
-                barGrad.addColorStop(0, '#0F305D'); 
-                barGrad.addColorStop(0.6, 'rgba(15, 48, 93, 0.9)'); 
-                barGrad.addColorStop(0.75, 'rgba(15, 48, 93, 0.6)');
-                barGrad.addColorStop(0.95, 'rgba(15, 48, 93, 0)');   
-                
-                ctx.fillStyle = barGrad;
-                ctx.fillRect(barX, barY, barW, barHeight);
-
-                // 5. Text Elements
-                ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.7)';
-                ctx.shadowBlur = isRecording ? 0 : refW * 0.005;
-                ctx.shadowOffsetX = isRecording ? 0 : refW * 0.001;
-                ctx.shadowOffsetY = isRecording ? 0 : refW * 0.001;
-
-                ctx.textAlign = 'left';
-                let currentY = barY + paddingY + primaryFontSize * 0.85; 
-                const textDrawX = isReel ? textMarginX : imgX + textMarginX;
-                
-                ctx.font = `900 ${primaryFontSize}px ${fontFamily}`;
-                ctx.fillStyle = 'white';
-
-                let equipmentText = '拍攝器材 : ';
-                if (camera && lens) {
-                    equipmentText += `${camera} + ${lens}`;
-                } else if (camera || lens) {
-                    equipmentText += camera || lens;
-                }
-                ctx.fillText(equipmentText, textDrawX, currentY);
-
-                currentY += secondaryFontSize + lineSpacing;
-                ctx.font = `400 ${secondaryFontSize}px ${fontFamily}`; 
                 const locationDisplay = [venue, seating].filter(Boolean).join(' | ');
-                ctx.fillText(locationDisplay, textDrawX, currentY);
+                if (locationDisplay) totalTextHeight += infoFontSize + lineSpacing;
 
-                if (optionalText) {
-                    currentY += secondaryFontSize + lineSpacing;
-                    ctx.fillText(optionalText, textDrawX, currentY);
-                }
+                if (optionalText) totalTextHeight += infoFontSize + lineSpacing;
+
+                const cardHeight = totalTextHeight + paddingY * 2;
+                let cardX = isReel ? cardMargin : imgX + cardMargin;
+                let cardY = isReel ? (h - (120 * (w / 1080)) - cardHeight) : (imgY + imgH - cardMargin - cardHeight);
+                let cardW = (isReel ? w : imgW) - (cardMargin * 2);
+
+                const cornerRadius = refW * 0.01;
+
+                // Render Symphonic Blue Overlay Bar (#102e5a)
+                ctx.save();
+                ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.3)';
+                ctx.shadowBlur = isRecording ? 0 : refW * 0.015;
+                ctx.shadowOffsetY = isRecording ? 0 : refW * 0.005;
+
+                drawRoundedRect(ctx, cardX, cardY, cardW, cardHeight, cornerRadius);
+                ctx.fillStyle = hexToRgba('#102e5a', 0.92);
+                ctx.fill();
 
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
-                ctx.shadowOffsetX = 0;
                 ctx.shadowOffsetY = 0;
 
-                // 6. Draw Logo
-                if (logoObj) {
-                    const logoMaxW = refW * 0.25; 
-                    const logoMaxH = refW * 0.08; 
+                ctx.lineWidth = Math.max(1, refW * 0.001);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.stroke();
+                ctx.restore();
+
+                // --- Render Clean Text (NO PREFEX LABELS, NO EMOJIS) ---
+                ctx.save();
+                ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.6)';
+                ctx.shadowBlur = isRecording ? 0 : refW * 0.003;
+                ctx.textAlign = 'left';
+
+                let currentY = cardY + paddingY + (eventName ? titleFontSize * 0.8 : infoFontSize * 0.8);
+                const textDrawX = cardX + paddingX;
+
+                if (eventName) {
+                    ctx.font = `800 ${titleFontSize}px ${fontFamily}`;
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillText(eventName, textDrawX, currentY);
+                    currentY += infoFontSize + lineSpacing * 1.4;
+                }
+
+                if (equipmentText) {
+                    ctx.font = `600 ${infoFontSize}px ${fontFamily}`;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+                    ctx.fillText(equipmentText, textDrawX, currentY);
+                    currentY += infoFontSize + lineSpacing;
+                }
+
+                if (locationDisplay) {
+                    ctx.font = `400 ${infoFontSize}px ${fontFamily}`;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+                    ctx.fillText(locationDisplay, textDrawX, currentY);
+                    currentY += infoFontSize + lineSpacing;
+                }
+
+                if (optionalText) {
+                    ctx.font = `400 ${infoFontSize * 0.9}px ${fontFamily}`;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                    ctx.fillText(optionalText, textDrawX, currentY);
+                }
+                ctx.restore();
+
+                // 4. Standalone Floating QR Code Badge
+                if (enableQr && qrObj) {
+                    const qrBoxW = refW * qrSize; 
+                    const qrPadding = qrBoxW * 0.08;
+                    const qrImgSize = qrBoxW - qrPadding * 2;
                     
+                    const textFontSize = qrBoxW * 0.11; 
+                    const verticalGap = qrBoxW * 0.08; 
+                    const textSpace = qrText ? (textFontSize + verticalGap) : 0;
+                    const qrBoxH = qrPadding * 2 + qrImgSize + textSpace;
+
+                    const padding = isReel ? 75 * (w / 1080) : imgW * 0.03;
+                    const boundX = isReel ? 0 : imgX;
+                    const boundY = isReel ? 0 : imgY;
+                    const boundW = isReel ? w : imgW;
+
+                    let qx, qy;
+                    switch (qrPosition) {
+                        case 'top-left':
+                            qx = boundX + padding;
+                            qy = boundY + padding;
+                            break;
+                        case 'top-right':
+                            qx = boundX + boundW - qrBoxW - padding;
+                            qy = boundY + padding;
+                            break;
+                        case 'bottom-left':
+                            qx = boundX + padding;
+                            qy = cardY - qrBoxH - padding;
+                            break;
+                        case 'bottom-right':
+                            qx = boundX + boundW - qrBoxW - padding;
+                            qy = cardY - qrBoxH - padding;
+                            break;
+                        default:
+                            qx = boundX + boundW - qrBoxW - padding;
+                            qy = boundY + padding;
+                    }
+
+                    if (logoObj) {
+                        const logoMaxH = refW * 0.10; 
+                        if ((qrPosition === 'top-right' && logoPosition === 'top-right') || 
+                            (qrPosition === 'top-left' && logoPosition === 'top-left')) {
+                            qy += logoMaxH + padding;
+                        }
+                    }
+
+                    ctx.save();
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.25)';
+                    ctx.shadowBlur = isRecording ? 0 : refW * 0.012;
+                    ctx.shadowOffsetY = isRecording ? 0 : refW * 0.004;
+
+                    drawRoundedRect(ctx, qx, qy, qrBoxW, qrBoxH, qrBoxW * 0.06);
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fill();
+
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetY = 0;
+
+                    ctx.lineWidth = Math.max(1, refW * 0.001);
+                    ctx.strokeStyle = 'rgba(16, 46, 90, 0.15)';
+                    ctx.stroke();
+
+                    ctx.drawImage(qrObj, qx + qrPadding, qy + qrPadding, qrImgSize, qrImgSize);
+
+                    if (qrText) {
+                        ctx.font = `800 ${textFontSize}px ${fontFamily}`;
+                        ctx.fillStyle = '#102e5a';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(qrText, qx + qrBoxW / 2, qy + qrPadding + qrImgSize + verticalGap + textFontSize * 0.85);
+                    }
+
+                    ctx.restore();
+                }
+
+                // 5. Custom Logo Overlay
+                if (logoObj) {
+                    const logoMaxW = refW * 0.28; 
+                    const logoMaxH = refW * 0.10; 
                     let logoW = logoObj.width;
                     let logoH = logoObj.height;
                     
@@ -316,25 +554,24 @@
                         logoX = logoPosition === 'top-left' ? pad : w - logoW - pad;
                         logoY = pad;
                     } else {
-                        logoX = logoPosition === 'top-left' ? imgX + textMarginX : imgX + imgW - logoW - textMarginX;
-                        logoY = imgY + imgW * 0.03; 
+                        logoX = logoPosition === 'top-left' ? imgX + cardMargin + paddingX : imgX + imgW - logoW - cardMargin - paddingX;
+                        logoY = imgY + cardMargin + refW * 0.01; 
                     }
 
-                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.3)';
-                    ctx.shadowBlur = isRecording ? 0 : refW * 0.01;
+                    ctx.save();
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.25)';
+                    ctx.shadowBlur = isRecording ? 0 : refW * 0.008;
                     ctx.drawImage(logoObj, logoX, logoY, logoW, logoH);
-                    ctx.shadowColor = 'transparent';
-                    ctx.shadowBlur = 0;
+                    ctx.restore();
                 }
 
-                // 7. Draw Seating Plan
+                // 6. Seating Plan Overlay
                 if (seatingPlanObj) {
-                    const spMaxW = refW * 0.25; 
-                    const spMaxH = (isReel ? h : imgH) * 0.20; 
+                    const spMaxW = refW * 0.22; 
+                    const spMaxH = (isReel ? h : imgH) * 0.16; 
                     
                     let spW = seatingPlanObj.width;
                     let spH = seatingPlanObj.height;
-                    
                     const spScale = Math.min(spMaxW / spW, spMaxH / spH);
                     spW = spW * spScale;
                     spH = spH * spScale;
@@ -343,46 +580,46 @@
                     if (isReel) {
                         const pad = 75 * (w / 1080);
                         spX = w - spW - pad;
-                        spY = h - spH - pad;
+                        spY = cardY - spH - refW * 0.015;
                     } else {
-                        spX = imgX + imgW - spW - textMarginX;
-                        spY = imgY + imgH - spH - paddingY; 
+                        spX = imgX + imgW - spW - cardMargin - paddingX;
+                        spY = cardY - spH - refW * 0.015; 
                     }
 
-                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.5)';
-                    ctx.shadowBlur = isRecording ? 0 : refW * 0.008;
-                    ctx.lineWidth = refW * 0.002;
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; 
+                    ctx.save();
+                    const spPadding = refW * 0.006;
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.3)';
+                    ctx.shadowBlur = isRecording ? 0 : refW * 0.01;
+                    
+                    drawRoundedRect(ctx, spX - spPadding, spY - spPadding, spW + spPadding * 2, spH + spPadding * 2, refW * 0.006);
+                    ctx.fillStyle = 'rgba(17, 19, 24, 0.85)';
+                    ctx.fill();
+                    ctx.lineWidth = Math.max(1, refW * 0.001);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                    ctx.stroke();
+
                     ctx.drawImage(seatingPlanObj, spX, spY, spW, spH);
-                    ctx.strokeRect(spX, spY, spW, spH);
                     
                     if (pinPosition) {
                         const pinX = spX + (pinPosition.x * spW);
                         const pinY = spY + (pinPosition.y * spH);
                         
-                        ctx.save();
                         ctx.translate(pinX, pinY);
-                        ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.6)';
-                        ctx.shadowBlur = isRecording ? 0 : refW * 0.005;
-                        ctx.shadowOffsetY = isRecording ? 0 : refW * 0.002;
-                        
-                        const pinScale = refW * 0.0018; 
+                        const pinScale = refW * 0.0016; 
                         ctx.scale(pinScale, pinScale);
                         ctx.translate(-12, -22); 
                         
                         const pinPath = new Path2D("M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z");
                         ctx.lineWidth = 1.5 / pinScale; 
-                        ctx.strokeStyle = '#ffffff';
+                        ctx.strokeStyle = '#FFFFFF';
                         ctx.stroke(pinPath);
-                        ctx.fillStyle = '#ef4444'; 
+                        ctx.fillStyle = '#DC2626'; 
                         ctx.fill(pinPath);
-                        ctx.restore();
                     }
-                    ctx.shadowColor = 'transparent';
-                    ctx.shadowBlur = 0;
+                    ctx.restore();
                 }
 
-                // 8. Draw Sharpness Zoom
+                // 7. Detail Loupe Zoom Overlay
                 if (enableZoom && mainImagePin) {
                     const insetSize = refW * zoomSize; 
                     const baseCropReference = refW * 0.25; 
@@ -393,13 +630,8 @@
                     const sWidth = baseCropReference / zoomLevel;
                     const sHeight = baseCropReference / zoomLevel; 
                     
-                    let sx = px - (sWidth / 2);
-                    let sy = py - (sHeight / 2);
-                    
-                    if (sx < 0) sx = 0;
-                    if (sy < 0) sy = 0;
-                    if (sx + sWidth > mWidth) sx = mWidth - sWidth;
-                    if (sy + sHeight > mHeight) sy = mHeight - sHeight;
+                    let sx = Math.max(0, Math.min(px - (sWidth / 2), mWidth - sWidth));
+                    let sy = Math.max(0, Math.min(py - (sHeight / 2), mHeight - sHeight));
 
                     let dx, dy;
                     const padding = isReel ? 75 * (w / 1080) : imgW * 0.03;
@@ -410,55 +642,98 @@
                     switch (zoomPosition) {
                         case 'top-left': dx = boundX + padding; dy = boundY + padding; break;
                         case 'top-right': dx = boundX + boundW - insetSize - padding; dy = boundY + padding; break;
-                        case 'bottom-left': dx = boundX + padding; dy = barY - insetSize - padding; break;
-                        case 'bottom-right': dx = boundX + boundW - insetSize - padding; dy = barY - insetSize - padding; break;
+                        case 'bottom-left': dx = boundX + padding; dy = cardY - insetSize - padding; break;
+                        case 'bottom-right': dx = boundX + boundW - insetSize - padding; dy = cardY - insetSize - padding; break;
                         default: dx = boundX + padding; dy = boundY + padding;
                     }
 
                     if (logoObj) {
-                        const logoMaxH = refW * 0.08;
-                        if (zoomPosition === 'top-right' && logoPosition === 'top-right') dy += logoMaxH + padding;
-                        else if (zoomPosition === 'top-left' && logoPosition === 'top-left') dy += logoMaxH + padding;
-                    }
-                    
-                    if (seatingPlanObj && zoomPosition === 'bottom-right') {
-                        const spMaxH = (isReel ? h : imgH) * 0.20;
-                        dy -= spMaxH + padding;
+                        const logoMaxH = refW * 0.10; 
+                        if ((zoomPosition === 'top-right' && logoPosition === 'top-right') || (zoomPosition === 'top-left' && logoPosition === 'top-left')) {
+                            dy += logoMaxH + padding;
+                        }
                     }
 
                     ctx.save();
+                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.3)';
+                    ctx.shadowBlur = isRecording ? 0 : refW * 0.012;
+
                     ctx.beginPath();
                     ctx.arc(dx + insetSize/2, dy + insetSize/2, insetSize/2, 0, Math.PI * 2);
-                    
-                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.6)';
-                    ctx.shadowBlur = isRecording ? 0 : refW * 0.015;
-                    ctx.shadowOffsetY = isRecording ? 0 : refW * 0.005;
-                    ctx.fillStyle = 'white';
+                    ctx.fillStyle = '#000000';
                     ctx.fill();
                     
                     ctx.clip();
                     ctx.drawImage(imageObj, sx, sy, sWidth, sHeight, dx, dy, insetSize, insetSize);
                     
-                    ctx.shadowColor = 'transparent';
-                    ctx.lineWidth = refW * 0.006;
-                    ctx.strokeStyle = 'white';
+                    ctx.restore();
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(dx + insetSize/2, dy + insetSize/2, insetSize/2, 0, Math.PI * 2);
+                    ctx.lineWidth = Math.max(2, refW * 0.003);
+                    ctx.strokeStyle = '#FFFFFF';
                     ctx.stroke();
                     ctx.restore();
                     
-                    ctx.font = `800 ${refW * 0.016}px ${fontFamily}`;
-                    ctx.fillStyle = 'white';
-                    ctx.textAlign = 'center';
-                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0,0,0,0.8)';
-                    ctx.shadowBlur = isRecording ? 0 : refW * 0.005;
-                    ctx.fillText(`${zoomLevel}x ZOOM`, dx + insetSize/2, dy + insetSize + refW * 0.025);
-                    ctx.shadowColor = 'transparent';
-                }
-            }, [imageObj, logoObj, seatingPlanObj, pinPosition, mainImagePin, enableZoom, zoomLevel, zoomSize, zoomPosition, camera, lens, venue, seating, optionalText, outputSize, fontFamily, fontScale, logoPosition, isRecording]);
+                    const badgeW = refW * 0.11;
+                    const badgeH = refW * 0.026;
+                    const badgeX = dx + insetSize/2 - badgeW/2;
+                    const badgeY = dy + insetSize - badgeH / 2;
 
-            // Setup Render Loop
+                    ctx.save();
+                    drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeH/2);
+                    ctx.fillStyle = 'rgba(17, 19, 24, 0.9)';
+                    ctx.fill();
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.stroke();
+
+                    ctx.font = `700 ${refW * 0.012}px ${fontFamily}`;
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`${zoomLevel}x 局部放大`, dx + insetSize/2, badgeY + badgeH * 0.68);
+                    ctx.restore();
+                }
+
+                // 8. IG Reels Safe Zone Guidelines
+                if (showSafeZone && isReel && !isRecording) {
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+                    ctx.lineWidth = w * 0.003;
+                    ctx.setLineDash([10, 10]);
+                    
+                    const topMargin = 120 * (w / 1080);
+                    const bottomMargin = 280 * (w / 1080);
+                    const rightMargin = 140 * (w / 1080);
+
+                    ctx.beginPath();
+                    ctx.moveTo(0, topMargin); ctx.lineTo(w, topMargin);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(0, h - bottomMargin); ctx.lineTo(w, h - bottomMargin);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(w - rightMargin, topMargin); ctx.lineTo(w - rightMargin, h - bottomMargin);
+                    ctx.stroke();
+
+                    ctx.font = `600 ${w * 0.02}px sans-serif`;
+                    ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+                    ctx.fillText('IG Reels 安全區', 20, topMargin - 15);
+                    ctx.restore();
+                }
+
+                ctx.restore();
+
+            }, [imageObj, logoObj, seatingPlanObj, pinPosition, mainImagePin, enableZoom, zoomLevel, zoomSize, zoomPosition, camera, lens, venue, seating, optionalText, outputSize, backgroundStyle, fontFamily, fontScale, logoPosition, enableQr, qrUrl, qrText, qrPosition, qrSize, qrObj, isRecording, showSafeZone]);
+
+            useEffect(() => {
+                document.fonts.ready.then(() => renderCanvas());
+            }, [fontFamily, renderCanvas]);
+
             useEffect(() => {
                 if (!imageObj) return;
-                
                 let intervalId;
 
                 if (mediaType === 'video') {
@@ -468,11 +743,8 @@
                     };
                     animationRef.current = requestAnimationFrame(loop);
                     
-                    // Anti-throttling fallback: Force 30fps updates if the tab goes to the background
                     intervalId = setInterval(() => {
-                        if (document.hidden) {
-                            renderCanvas();
-                        }
+                        if (document.hidden) renderCanvas();
                     }, 1000 / 30);
 
                     return () => {
@@ -484,12 +756,15 @@
                 }
             }, [renderCanvas, mediaType, imageObj]);
 
-            // Construct caption derived variable
+            // Hong Kong Chinese Caption Generator
             const getGeneratedCaption = () => {
-                const equipmentText = camera && lens ? `${camera} ＋ ${lens}` : (camera || lens || '');
+                const equipmentText = camera && lens ? `${camera} + ${lens}` : (camera || lens || '');
                 const locationText = [venue, seating].filter(Boolean).join(' | ');
-                
-                return `客人回圖:\n【 ${eventName || '活動名稱'} 】\n\n📸 拍攝器材：\n👉 ${equipmentText}\n\n📍 捕捉位置 ：\n👉 ${locationText}`;
+                let caption = `【 ${eventName || '活動名稱'} 】\n\n拍攝器材：${equipmentText}\n拍攝位置：${locationText}`;
+                if (enableQr && qrUrl) {
+                    caption += `\n\n租借同款機鏡：${qrUrl}`;
+                }
+                return caption;
             };
 
             const copyCaptionToClipboard = () => {
@@ -498,6 +773,7 @@
                 setTimeout(() => setCopied(false), 2000);
             };
 
+            // REFACTORED & FIXED VIDEO DOWNLOAD ENGINE
             const downloadMedia = async () => {
                 if (!canvasRef.current || !imageObj) return;
 
@@ -510,449 +786,526 @@
                 } else if (mediaType === 'video') {
                     const canvas = canvasRef.current;
                     if (!canvas.captureStream) {
-                        alert("Your browser does not support local video export.");
+                        alert("你的瀏覽器不支援本地影片導出功能。");
                         return;
                     }
 
                     setIsRecording(true);
                     setRecordingProgress(0);
 
-                    // 1. Prepare video for playback
+                    // 1. Pause and reset video position cleanly
                     imageObj.pause();
-                    imageObj.loop = false;
-                    imageObj.muted = false; // UNMUTE to force audio processing
                     imageObj.currentTime = 0;
+                    
+                    // Wait for seeked event to ensure frame 0 is rendered
+                    await new Promise(resolve => {
+                        const onSeeked = () => {
+                            imageObj.removeEventListener('seeked', onSeeked);
+                            resolve();
+                        };
+                        imageObj.addEventListener('seeked', onSeeked);
+                        setTimeout(resolve, 300); // Fallback
+                    });
 
-                    // 2. Setup Web Audio API for SILENT EXTRACTION
-                    if (!imageObj._audioCtx) {
-                        const AudioContext = window.AudioContext || window.webkitAudioContext;
-                        imageObj._audioCtx = new AudioContext();
-                        imageObj._audioSource = imageObj._audioCtx.createMediaElementSource(imageObj);
-                        imageObj._audioDest = imageObj._audioCtx.createMediaStreamDestination();
-                        
-                        imageObj._audioSource.connect(imageObj._audioDest);
-                    }
-
-                    if (imageObj._audioCtx.state === 'suspended') {
-                        await imageObj._audioCtx.resume();
-                    }
-
-                    // 3. Explicitly Combine Video (Canvas) + Audio (Web Audio API Stream)
+                    // 2. Capture Video Stream from Canvas
                     const canvasStream = canvas.captureStream(30);
-                    const combinedTracks = [...canvasStream.getVideoTracks()];
+                    const tracks = [...canvasStream.getVideoTracks()];
 
-                    const audioTracks = imageObj._audioDest.stream.getAudioTracks();
-                    if (audioTracks.length > 0) {
-                        combinedTracks.push(audioTracks[0]);
+                    // 3. Extract Audio Track directly from video if available (No Web Audio API context errors)
+                    let videoAudioStream = null;
+                    if (imageObj.captureStream) {
+                        videoAudioStream = imageObj.captureStream();
+                    } else if (imageObj.mozCaptureStream) {
+                        videoAudioStream = imageObj.mozCaptureStream();
                     }
 
-                    const finalStream = new MediaStream(combinedTracks);
+                    if (videoAudioStream) {
+                        const audioTracks = videoAudioStream.getAudioTracks();
+                        if (audioTracks.length > 0) {
+                            tracks.push(audioTracks[0]);
+                        }
+                    }
 
-                    // 4. Calculate Bitrate and Setup Recorder
+                    const combinedStream = new MediaStream(tracks);
+
+                    // 4. Select Robust Supported MIME Type
+                    const types = [
+                        'video/webm;codecs=vp9,opus',
+                        'video/webm;codecs=vp8,opus',
+                        'video/webm',
+                        'video/mp4'
+                    ];
+
+                    let selectedMime = '';
+                    let fileExt = 'webm';
+                    for (const t of types) {
+                        if (MediaRecorder.isTypeSupported(t)) {
+                            selectedMime = t;
+                            if (t.includes('mp4')) fileExt = 'mp4';
+                            break;
+                        }
+                    }
+
                     const totalPixels = canvas.width * canvas.height;
                     const dynamicBitrate = Math.round((totalPixels / 2073600) * 12000000); 
                     const safeBitrate = Math.min(Math.max(dynamicBitrate, 8000000), 80000000);
 
-                    let mimeType = 'video/webm';
-                    let fileExt = 'webm';
-                    
-                    if (MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E, mp4a.40.2"')) {
-                        mimeType = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"';
-                        fileExt = 'mp4';
-                    } else if (MediaRecorder.isTypeSupported('video/mp4')) {
-                        mimeType = 'video/mp4';
-                        fileExt = 'mp4';
-                    } else if (MediaRecorder.isTypeSupported('video/webm; codecs="vp8, opus"')) {
-                        mimeType = 'video/webm; codecs="vp8, opus"';
-                    }
-
-                    const recorderOptions = { 
-                        videoBitsPerSecond: safeBitrate,
-                        mimeType: mimeType
-                    };
-
-                    const recorder = new MediaRecorder(finalStream, recorderOptions); 
+                    const recorderOptions = selectedMime ? { mimeType: selectedMime, videoBitsPerSecond: safeBitrate } : { videoBitsPerSecond: safeBitrate };
+                    const recorder = new MediaRecorder(combinedStream, recorderOptions);
                     const chunks = [];
 
                     recorder.ondataavailable = e => {
-                        if (e.data && e.data.size > 0) chunks.push(e.data);
+                        if (e.data && e.data.size > 0) {
+                            chunks.push(e.data);
+                        }
                     };
 
                     recorder.onstop = () => {
-                        const blob = new Blob(chunks, { type: mimeType });
+                        if (chunks.length === 0) {
+                            alert("影片匯出失敗，請重試。");
+                            setIsRecording(false);
+                            return;
+                        }
+
+                        const blob = new Blob(chunks, { type: selectedMime || 'video/webm' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
                         a.download = `watermarked_video.${fileExt}`;
                         a.click();
-                        setIsRecording(false);
                         
-                        // Restore silent looping preview state
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+                        setIsRecording(false);
                         imageObj.muted = true;
                         imageObj.loop = true; 
-                        imageObj.play();
+                        imageObj.play().catch(() => {});
                     };
 
-                    // Progress tracker
-                    const duration = imageObj.duration;
+                    // 5. Unmute and Start Recording with 100ms time slice
+                    imageObj.muted = false;
+                    imageObj.loop = false;
+                    recorder.start(100);
+
+                    const duration = imageObj.duration || 0;
+                    let isEnded = false;
+
+                    const stopRecording = () => {
+                        if (isEnded) return;
+                        isEnded = true;
+                        clearInterval(progressInterval);
+                        imageObj.removeEventListener('ended', stopRecording);
+                        if (recorder.state !== 'inactive') {
+                            recorder.stop();
+                        }
+                    };
+
+                    imageObj.addEventListener('ended', stopRecording);
+
                     const progressInterval = setInterval(() => {
-                        if (imageObj.currentTime >= duration || imageObj.paused) {
-                            clearInterval(progressInterval);
-                        } else {
-                            setRecordingProgress(Math.round((imageObj.currentTime / duration) * 100));
+                        if (duration > 0) {
+                            const prog = Math.min(99, Math.round((imageObj.currentTime / duration) * 100));
+                            setRecordingProgress(prog);
+                        }
+                        if (imageObj.ended || (duration > 0 && imageObj.currentTime >= duration)) {
+                            stopRecording();
                         }
                     }, 100);
 
-                    imageObj.onended = () => {
-                        recorder.stop();
-                        clearInterval(progressInterval);
-                    };
-
-                    // 5. Start Recording
-                    recorder.start(1000);
-                    
                     try {
                         await imageObj.play();
                     } catch (err) {
-                        console.error("Playback failed", err);
-                        setIsRecording(false);
-                        recorder.stop();
+                        console.error("Playback failed during export:", err);
+                        stopRecording();
                     }
                 }
             };
 
             return (
-                <div className="min-h-screen p-3 sm:p-4 lg:p-8 max-w-[1400px] mx-auto flex flex-col lg:flex-row gap-6 lg:gap-8">
-                    {/* Control Panel */}
-                    <div className="w-full lg:w-1/3 xl:w-1/4 bg-gray-800 p-5 lg:p-6 rounded-xl shadow-2xl border border-gray-700 h-fit lg:max-h-[95vh] lg:overflow-y-auto">
-                        <h1 className="text-2xl font-bold mb-6 text-blue-400">Photo & Video Watermark</h1>
-                        
-                        {mediaType === 'video' && (
-                            <div className="mb-6 p-3 bg-blue-900/30 border border-blue-700 rounded-lg">
-                                <p className="text-xs text-blue-200 leading-relaxed">
-                                    <span className="font-bold">Experimental Video Mode:</span> Videos are processed locally in your browser. Exported files will be saved as <b>.mp4</b> (if supported by your browser) or <b>.webm</b>. Very high-resolution files (like 4K) may drop frames depending on your computer's speed.
-                                </p>
+                <div className="min-h-screen flex flex-col">
+                    {/* Top Bar */}
+                    <header className="h-16 border-b border-white/10 px-6 flex items-center justify-between studio-card sticky top-0 z-50">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm">
+                                P
                             </div>
-                        )}
-
-                        <div className="space-y-6">
-                            {/* SECTION 1 */}
                             <div>
-                                <h2 className="text-lg font-semibold text-white mb-3">1. Media & Format</h2>
+                                <h1 className="text-sm font-bold tracking-wide text-white">PHOTO WATERMARK STUDIO</h1>
+                                <p className="text-[10px] text-gray-400 font-medium tracking-wider uppercase">Professional Editorial Edition</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                            {outputSize === 'ig-reel' && (
+                                <button 
+                                    onClick={() => setShowSafeZone(!showSafeZone)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${showSafeZone ? 'bg-red-500/20 border-red-500/50 text-red-300' : 'bg-studio-card border-white/10 text-gray-400 hover:text-white'}`}
+                                >
+                                    {showSafeZone ? '隱藏安全區' : 'IG Reels 安全區'}
+                                </button>
+                            )}
+                            <button 
+                                onClick={downloadMedia}
+                                disabled={!imageObj || isRecording}
+                                className={`px-5 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-2 ${imageObj && !isRecording ? 'bg-blue-600 hover:bg-blue-500 text-white cursor-pointer' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                            >
+                                {isRecording ? (
+                                    <span>匯出中... {recordingProgress}%</span>
+                                ) : (
+                                    <span>匯出 {mediaType === 'video' ? '影片' : '相片'}</span>
+                                )}
+                            </button>
+                        </div>
+                    </header>
+
+                    {/* Main Workbench Layout */}
+                    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                        
+                        {/* Left Control Sidebar */}
+                        <div className="w-full lg:w-[400px] studio-card border-r border-white/5 flex flex-col overflow-y-auto">
+                            <div className="p-6 space-y-6">
+                                
+                                {/* SECTION 1: Media Setup */}
                                 <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-xs font-bold uppercase tracking-wider text-blue-400">1. 媒體與畫布設定</h2>
+                                        {mediaType === 'video' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold">影片模式</span>}
+                                    </div>
+
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-1">Main Photo or Video</label>
+                                        <label className="block text-xs font-medium text-gray-400 mb-2">上載相片 / 影片</label>
                                         <input 
                                             type="file" 
                                             accept="image/*,video/*" 
                                             onChange={handleMediaUpload}
-                                            className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 transition cursor-pointer"
+                                            className="block w-full text-xs text-gray-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600/20 file:text-blue-400 hover:file:bg-blue-600/30 transition cursor-pointer studio-input rounded-lg"
                                         />
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-1">Export Size</label>
-                                        <select 
-                                            value={outputSize} 
-                                            onChange={(e) => setOutputSize(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        >
-                                            <option value="ig">Instagram 4:5 (Original Res)</option>
-                                            <option value="ig-reel">IG Reels 9:16 (Safe Zone)</option>
-                                            <option value="original">Original Image Size</option>
-                                        </select>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-400 mb-1.5">畫布比例</label>
+                                            <select 
+                                                value={outputSize} 
+                                                onChange={(e) => setOutputSize(e.target.value)}
+                                                className="w-full text-xs studio-input rounded-lg px-3 py-2 text-gray-200 outline-none"
+                                            >
+                                                <option value="ig">IG 貼文 (4:5 比例)</option>
+                                                <option value="ig-reel">IG Reels (9:16 全螢幕)</option>
+                                                <option value="original">原始相片比例</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-400 mb-1.5">畫布背景樣式</label>
+                                            <select 
+                                                value={backgroundStyle} 
+                                                onChange={(e) => setBackgroundStyle(e.target.value)}
+                                                className="w-full text-xs studio-input rounded-lg px-3 py-2 text-gray-200 outline-none"
+                                            >
+                                                <option value="blur">模糊相片背景 (推薦)</option>
+                                                <option value="dark">深藍夜色</option>
+                                                <option value="white">純白留白</option>
+                                            </select>
+                                        </div>
                                     </div>
+
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-1">Logo Position</label>
-                                        <select 
-                                            value={logoPosition} 
-                                            onChange={(e) => setLogoPosition(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        >
-                                            <option value="top-right">Top Right</option>
-                                            <option value="top-left">Top Left</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-1">Typography Font</label>
-                                        <select 
-                                            value={fontFamily} 
-                                            onChange={(e) => setFontFamily(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        >
-                                            <option value="'Noto Sans TC', sans-serif">Noto Sans (Modern)</option>
-                                            <option value="'Noto Serif TC', serif">Noto Serif (Classic)</option>
-                                            <option value="'Montserrat', sans-serif">Montserrat (Clean)</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-1">
-                                            Font Size ({Math.round(fontScale * 100)}%)
-                                        </label>
-                                        <input 
-                                            type="range" 
-                                            min="0.5" 
-                                            max="1.5" 
-                                            step="0.05"
-                                            value={fontScale} 
-                                            onChange={(e) => setFontScale(parseFloat(e.target.value))}
-                                            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                                        />
+                                        <label className="block text-xs font-medium text-gray-400 mb-1.5">自訂 Logo 標誌</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                onChange={handleLogoUpload}
+                                                className="block w-full text-[11px] text-gray-400 file:mr-2 file:py-1.5 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-white/10 file:text-gray-200 studio-input rounded-lg"
+                                            />
+                                            <select 
+                                                value={logoPosition} 
+                                                onChange={(e) => setLogoPosition(e.target.value)}
+                                                className="w-full text-xs studio-input rounded-lg px-3 py-2 text-gray-200 outline-none"
+                                            >
+                                                <option value="top-right">右上角</option>
+                                                <option value="top-left">左上角</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <hr className="border-gray-700" />
+                                <hr className="border-white/5" />
 
-                            {/* SECTION 2 */}
-                            <div>
-                                <h2 className="text-lg font-semibold text-white mb-3">2. Content Details</h2>
-                                <div className="space-y-3">
+                                {/* SECTION 2: Typography & Specs */}
+                                <div className="space-y-4">
+                                    <h2 className="text-xs font-bold uppercase tracking-wider text-blue-400">2. 機鏡與活動資料</h2>
+                                    
                                     <div>
-                                        <label className="block text-xs text-gray-400 mb-1">Event / Tour Title (活動名稱)</label>
+                                        <label className="block text-[11px] font-medium text-gray-400 mb-1">活動名稱</label>
                                         <input 
                                             type="text" 
                                             value={eventName} 
                                             onChange={(e) => setEventName(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                            className="w-full text-xs studio-input rounded-lg px-3 py-2 text-white outline-none"
                                         />
                                     </div>
-                                    <div className="flex gap-2">
-                                        <div className="flex-1">
-                                            <label className="block text-xs text-gray-400 mb-1">Camera (相機)</label>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[11px] font-medium text-gray-400 mb-1">相機機身</label>
                                             <input 
                                                 type="text" 
                                                 value={camera} 
                                                 onChange={(e) => setCamera(e.target.value)}
-                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className="w-full text-xs studio-input rounded-lg px-3 py-2 text-white outline-none"
                                             />
                                         </div>
-                                        <div className="flex-1">
-                                            <label className="block text-xs text-gray-400 mb-1">Lens (鏡頭)</label>
+                                        <div>
+                                            <label className="block text-[11px] font-medium text-gray-400 mb-1">鏡頭型號</label>
                                             <input 
                                                 type="text" 
                                                 value={lens} 
                                                 onChange={(e) => setLens(e.target.value)}
-                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className="w-full text-xs studio-input rounded-lg px-3 py-2 text-white outline-none"
                                             />
                                         </div>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <div className="flex-1">
-                                            <label className="block text-xs text-gray-400 mb-1">Venue / Event</label>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[11px] font-medium text-gray-400 mb-1">場地名稱</label>
                                             <input 
                                                 type="text" 
                                                 value={venue} 
                                                 onChange={(e) => setVenue(e.target.value)}
-                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className="w-full text-xs studio-input rounded-lg px-3 py-2 text-white outline-none"
                                             />
                                         </div>
-                                        <div className="flex-1">
-                                            <label className="block text-xs text-gray-400 mb-1">Seating / Row</label>
+                                        <div>
+                                            <label className="block text-[11px] font-medium text-gray-400 mb-1">座位 / 行號</label>
                                             <input 
                                                 type="text" 
                                                 value={seating} 
                                                 onChange={(e) => setSeating(e.target.value)}
-                                                className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                className="w-full text-xs studio-input rounded-lg px-3 py-2 text-white outline-none"
                                             />
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs text-gray-400 mb-1">Additional Text (Optional)</label>
-                                        <input 
-                                            type="text" 
-                                            value={optionalText} 
-                                            onChange={(e) => setOptionalText(e.target.value)}
-                                            placeholder="Leave blank to hide..."
-                                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
 
-                            <hr className="border-gray-700" />
-
-                            {/* SECTION 3: Seating Plan */}
-                            <div>
-                                <h2 className="text-lg font-semibold text-white mb-3">3. Seating Plan (Optional)</h2>
-                                <div className="space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-1">Upload Seating Plan</label>
-                                        <input 
-                                            type="file" 
-                                            accept="image/*" 
-                                            onChange={handleSeatingPlanUpload}
-                                            className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 transition cursor-pointer"
-                                        />
-                                    </div>
-                                    {seatingPlanSrc && (
-                                        <div className="bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
-                                            <label className="block text-xs font-semibold text-gray-300 mb-2">
-                                                Tap / Click to drop a pin on the seat
-                                            </label>
-                                            <div className="relative inline-block border border-gray-600 bg-black rounded overflow-hidden">
-                                                <img 
-                                                    src={seatingPlanSrc} 
-                                                    alt="Seating Plan" 
-                                                    className="max-h-48 max-w-full cursor-crosshair object-contain" 
-                                                    onClick={handleSeatingPlanClick}
-                                                />
-                                                {pinPosition && (
-                                                    <svg 
-                                                        className="absolute w-8 h-8 text-red-500 pointer-events-none"
-                                                        style={{
-                                                            left: `${pinPosition.x * 100}%`,
-                                                            top: `${pinPosition.y * 100}%`,
-                                                            transform: 'translate(-50%, -92%)',
-                                                            filter: 'drop-shadow(0px 2px 3px rgba(0,0,0,0.6))'
-                                                        }}
-                                                        viewBox="0 0 24 24" 
-                                                        fill="currentColor" 
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                    >
-                                                        <path stroke="white" strokeWidth="1.5" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                                                    </svg>
-                                                )}
-                                            </div>
-                                            <button 
-                                                onClick={clearSeatingPlan} 
-                                                className="text-xs text-red-400 mt-3 block w-full hover:text-red-300 transition"
+                                        <label className="block text-[11px] font-medium text-gray-400 mb-1">字型設定與大小</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <select 
+                                                value={fontFamily} 
+                                                onChange={(e) => setFontFamily(e.target.value)}
+                                                className="w-full text-xs studio-input rounded-lg px-3 py-2 text-gray-200 outline-none"
                                             >
-                                                Remove Seating Plan
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <hr className="border-gray-700" />
-
-                            {/* SECTION 4: Sharpness Zoom */}
-                            <div>
-                                <h2 className="text-lg font-semibold text-white mb-3">4. Sharpness Zoom (Optional)</h2>
-                                <div className="space-y-4">
-                                    <label className="flex items-center space-x-3 cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={enableZoom} 
-                                            onChange={(e) => setEnableZoom(e.target.checked)} 
-                                            className="w-5 h-5 accent-blue-500 rounded bg-gray-900 border-gray-600 focus:ring-blue-500 focus:ring-2"
-                                        />
-                                        <span className="text-sm font-medium text-gray-300">Enable Sharpness Zoom</span>
-                                    </label>
-
-                                    {enableZoom && imageSrc && (
-                                        <div className="bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
-                                            <label className="block text-xs font-semibold text-gray-300 mb-2">
-                                                Tap / Click on the image to select zoom area
-                                            </label>
-                                            <div className="relative inline-block border border-gray-600 bg-black rounded overflow-hidden">
-                                                {mediaType === 'image' ? (
-                                                    <img 
-                                                        src={imageSrc} 
-                                                        alt="Main Thumbnail" 
-                                                        className="max-h-48 max-w-full cursor-crosshair object-contain" 
-                                                        onClick={handleMainImageClick}
-                                                    />
-                                                ) : (
-                                                    <video 
-                                                        src={imageSrc} 
-                                                        className="max-h-48 max-w-full cursor-crosshair object-contain" 
-                                                        onClick={handleMainImageClick}
-                                                    />
-                                                )}
+                                                <option value="'Noto Sans TC', sans-serif">Noto Sans (現代無襯線)</option>
+                                                <option value="'Noto Serif TC', serif">Noto Serif (經典明體)</option>
+                                                <option value="'Montserrat', sans-serif">Montserrat (簡潔美學)</option>
+                                            </select>
+                                            <div className="flex items-center space-x-2">
+                                                <input 
+                                                    type="range" min="0.5" max="1.5" step="0.05"
+                                                    value={fontScale} 
+                                                    onChange={(e) => setFontScale(parseFloat(e.target.value))}
+                                                    className="w-full accent-blue-500 cursor-pointer"
+                                                />
+                                                <span className="text-[10px] text-gray-400 font-mono w-8">{Math.round(fontScale * 100)}%</span>
                                             </div>
-                                            <div className="mt-4 text-left space-y-3">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr className="border-white/5" />
+
+                                {/* SECTION 3: Standalone Floating QR Code */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-xs font-bold uppercase tracking-wider text-blue-400">3. 獨立 QR Code 標籤</h2>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={enableQr} 
+                                                onChange={(e) => setEnableQr(e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+
+                                    {enableQr && (
+                                        <div className="p-3 bg-black/40 border border-white/10 rounded-lg space-y-3">
+                                            <div>
+                                                <label className="block text-[10px] text-gray-400 mb-1">租借網址 (URL)</label>
+                                                <input 
+                                                    type="text" 
+                                                    value={qrUrl} 
+                                                    onChange={(e) => setQrUrl(e.target.value)}
+                                                    placeholder="https://your-rental-shop.com"
+                                                    className="w-full text-xs studio-input rounded-lg px-2.5 py-1.5 text-white outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] text-gray-400 mb-1">宣傳標語</label>
+                                                <input 
+                                                    type="text" 
+                                                    value={qrText} 
+                                                    onChange={(e) => setQrText(e.target.value)}
+                                                    placeholder="立刻租借"
+                                                    className="w-full text-xs studio-input rounded-lg px-2.5 py-1.5 text-white outline-none"
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
                                                 <div>
-                                                    <label className="block text-xs text-gray-400 mb-1">Zoom Position</label>
+                                                    <label className="block text-[10px] text-gray-400 mb-1">顯示位置</label>
                                                     <select 
-                                                        value={zoomPosition} 
-                                                        onChange={(e) => setZoomPosition(e.target.value)}
-                                                        className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-1.5 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        value={qrPosition} 
+                                                        onChange={(e) => setQrPosition(e.target.value)}
+                                                        className="w-full text-xs studio-input rounded-lg px-2.5 py-1.5 text-white outline-none"
                                                     >
-                                                        <option value="top-left">Top Left</option>
-                                                        <option value="top-right">Top Right</option>
-                                                        <option value="bottom-left">Bottom Left</option>
-                                                        <option value="bottom-right">Bottom Right</option>
+                                                        <option value="top-right">右上角</option>
+                                                        <option value="top-left">左上角</option>
+                                                        <option value="bottom-right">右下角 (Bar 上方)</option>
+                                                        <option value="bottom-left">左下角 (Bar 上方)</option>
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs text-gray-400 mb-1">Zoom Level ({zoomLevel}x)</label>
+                                                    <label className="block text-[10px] text-gray-400 mb-1">尺寸大小 ({Math.round(qrSize * 100)}%)</label>
                                                     <input 
-                                                        type="range" 
-                                                        min="2" max="5" step="0.1" 
-                                                        value={zoomLevel} 
-                                                        onChange={(e) => setZoomLevel(parseFloat(e.target.value))} 
-                                                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs text-gray-400 mb-1">Thumbnail Size ({Math.round(zoomSize * 100)}%)</label>
-                                                    <input 
-                                                        type="range" 
-                                                        min="0.1" max="0.5" step="0.05" 
-                                                        value={zoomSize} 
-                                                        onChange={(e) => setZoomSize(parseFloat(e.target.value))} 
-                                                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+                                                        type="range" min="0.08" max="0.30" step="0.01"
+                                                        value={qrSize} 
+                                                        onChange={(e) => setQrSize(parseFloat(e.target.value))}
+                                                        className="w-full mt-2 accent-blue-500 cursor-pointer"
                                                     />
                                                 </div>
                                             </div>
                                         </div>
                                     )}
                                 </div>
-                            </div>
 
-                            <hr className="border-gray-700" />
+                                <hr className="border-white/5" />
 
-                            {/* SECTION 5: Instagram Caption Generator */}
-                            <div>
-                                <h2 className="text-lg font-semibold text-white mb-3">5. Instagram Caption</h2>
-                                <div className="space-y-3 bg-gray-900 p-3 rounded-lg border border-gray-700">
-                                    <textarea
-                                        readOnly
-                                        value={getGeneratedCaption()}
-                                        className="w-full h-44 bg-gray-950 border border-gray-800 rounded p-2 text-xs text-gray-300 font-mono resize-none focus:outline-none"
+                                {/* SECTION 4: Sharpness Zoom Overlay */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-xs font-bold uppercase tracking-wider text-blue-400">4. 局部放大鏡 (Detail Loupe)</h2>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={enableZoom} 
+                                                onChange={(e) => setEnableZoom(e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+
+                                    {enableZoom && (
+                                        <div className="p-3 bg-black/40 border border-white/10 rounded-lg space-y-3">
+                                            <p className="text-[11px] text-gray-300">
+                                                請直接點擊右側預覽圖以選取欲放大的焦點。
+                                            </p>
+                                            
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[10px] text-gray-400 mb-1">放大鏡位置</label>
+                                                    <select 
+                                                        value={zoomPosition} 
+                                                        onChange={(e) => setZoomPosition(e.target.value)}
+                                                        className="w-full text-xs studio-input rounded-lg px-2.5 py-1.5 text-white outline-none"
+                                                    >
+                                                        <option value="top-left">左上角</option>
+                                                        <option value="top-right">右上角</option>
+                                                        <option value="bottom-left">左下角</option>
+                                                        <option value="bottom-right">右下角</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] text-gray-400 mb-1">倍率 ({zoomLevel}x)</label>
+                                                    <input 
+                                                        type="range" min="2" max="5" step="0.1"
+                                                        value={zoomLevel} 
+                                                        onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+                                                        className="w-full mt-2 accent-blue-500 cursor-pointer"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <hr className="border-white/5" />
+
+                                {/* SECTION 5: Seating Plan */}
+                                <div className="space-y-4">
+                                    <h2 className="text-xs font-bold uppercase tracking-wider text-blue-400">5. 場地座位圖</h2>
+                                    <input 
+                                        type="file" accept="image/*" 
+                                        onChange={handleSeatingPlanUpload}
+                                        className="block w-full text-xs text-gray-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:bg-white/10 file:text-gray-200 studio-input rounded-lg cursor-pointer"
                                     />
-                                    <button
+
+                                    {seatingPlanSrc && (
+                                        <div className="bg-black/40 p-3 rounded-lg border border-white/10 text-center space-y-2">
+                                            <span className="text-[10px] text-gray-400">點擊地圖以標記座位位置</span>
+                                            <div className="relative inline-block border border-white/20 rounded overflow-hidden">
+                                                <img 
+                                                    src={seatingPlanSrc} alt="Seating Plan" 
+                                                    className="max-h-36 object-contain cursor-crosshair" 
+                                                    onClick={handleSeatingPlanClick}
+                                                />
+                                                {pinPosition && (
+                                                    <div 
+                                                        className="absolute w-4 h-4 text-red-500 pointer-events-none transform -translate-x-1/2 -translate-y-full"
+                                                        style={{ left: `${pinPosition.x * 100}%`, top: `${pinPosition.y * 100}%` }}
+                                                    >
+                                                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button onClick={clearSeatingPlan} className="text-[10px] text-red-400 hover:underline block w-full">移除座位圖</button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <hr className="border-white/5" />
+
+                                {/* SECTION 6: Caption Generator */}
+                                <div className="space-y-3">
+                                    <h2 className="text-xs font-bold uppercase tracking-wider text-blue-400">6. Instagram 貼文內文</h2>
+                                    <textarea 
+                                        readOnly 
+                                        value={getGeneratedCaption()} 
+                                        className="w-full h-28 bg-black/50 border border-white/10 rounded-lg p-3 text-xs text-gray-300 font-mono resize-none outline-none"
+                                    />
+                                    <button 
                                         onClick={copyCaptionToClipboard}
-                                        className={`w-full py-2 rounded font-bold text-sm transition shadow flex justify-center items-center ${copied ? 'bg-blue-600 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                                        className={`w-full py-2 rounded-lg font-bold text-xs transition ${copied ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
                                     >
-                                        {copied ? 'Copied Context! ✓' : 'Copy Caption'}
+                                        {copied ? '已複製貼文內容！ ✓' : '複製貼文內文'}
                                     </button>
                                 </div>
+
                             </div>
-
-                            <button 
-                                onClick={downloadMedia}
-                                disabled={!imageObj || isRecording}
-                                className={`w-full py-4 mt-4 rounded-md font-bold text-lg transition shadow-lg flex justify-center items-center ${imageObj && !isRecording ? 'bg-green-600 hover:bg-green-500 text-white cursor-pointer' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
-                            >
-                                {isRecording ? (
-                                    <span>Recording... {recordingProgress}%</span>
-                                ) : (
-                                    <span>Export {mediaType === 'video' ? 'Video' : 'Image'}</span>
-                                )}
-                            </button>
                         </div>
-                    </div>
 
-                    {/* Preview Panel */}
-                    <div className="w-full lg:w-2/3 xl:w-3/4 flex flex-col items-center">
-                        <div className="w-full text-center mb-2 text-gray-400 flex items-center justify-center gap-2">
-                            <span>Live Preview</span>
-                            {mediaType === 'video' && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold animate-pulse">Video Active</span>}
-                        </div>
-                        
-                        {/* Canvas Container */}
-                        <div className="canvas-container w-full rounded-xl overflow-hidden shadow-2xl flex items-center justify-center min-h-[350px] lg:min-h-[500px] border border-gray-700 relative">
+                        {/* Right Live Viewport */}
+                        <div className="flex-1 canvas-viewport flex flex-col items-center justify-center p-6 relative overflow-hidden">
                             {!imageObj && (
-                                <p className="text-gray-500 italic absolute px-4 text-center">Upload an image or video to see the preview</p>
+                                <div className="text-center space-y-2 max-w-sm">
+                                    <div className="w-12 h-12 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-gray-400">
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                    </div>
+                                    <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">尚未載入媒體</h3>
+                                    <p className="text-[11px] text-gray-500">請從左側選單上載相片或影片以開始合成水印。</p>
+                                </div>
                             )}
+
                             <canvas 
                                 ref={canvasRef} 
-                                className="max-w-full max-h-[60vh] lg:max-h-[85vh] object-contain shadow-2xl"
+                                onClick={handleCanvasClick}
+                                className={`max-w-full max-h-[82vh] object-contain rounded-lg shadow-2xl transition-all duration-200 outline-none ${enableZoom ? 'cursor-crosshair' : 'cursor-default'}`}
                                 style={{ display: imageObj ? 'block' : 'none' }}
                             />
                         </div>
+
                     </div>
                 </div>
             );
