@@ -376,7 +376,7 @@
                 }
 
                 const isReel = outputSize === 'ig-reel';
-                const refW = isReel ? w : imgW;
+                const refW = w; // Unified to canvas frame width for 100% layout consistency
 
                 // 3. Overlay Box Settings (Symphonic Blue #102e5a)
                 const cardMargin = refW * 0.025;
@@ -399,9 +399,10 @@
                 if (optionalText) totalTextHeight += infoFontSize + lineSpacing;
 
                 const cardHeight = totalTextHeight + paddingY * 2;
-                let cardX = isReel ? cardMargin : imgX + cardMargin;
-                let cardY = isReel ? (h - (120 * (w / 1080)) - cardHeight) : (imgY + imgH - cardMargin - cardHeight);
-                let cardW = (isReel ? w : imgW) - (cardMargin * 2);
+                const bottomPadding = isReel ? (120 * (w / 1080)) : cardMargin;
+                let cardX = cardMargin;
+                let cardY = h - bottomPadding - cardHeight;
+                let cardW = w - (cardMargin * 2);
 
                 const cornerRadius = refW * 0.01;
 
@@ -424,7 +425,7 @@
                 ctx.stroke();
                 ctx.restore();
 
-                // --- Render Clean Text (NO PREFEX LABELS, NO EMOJIS) ---
+                // --- Render Clean Text ---
                 ctx.save();
                 ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.6)';
                 ctx.shadowBlur = isRecording ? 0 : refW * 0.003;
@@ -472,10 +473,10 @@
                     const textSpace = qrText ? (textFontSize + verticalGap) : 0;
                     const qrBoxH = qrPadding * 2 + qrImgSize + textSpace;
 
-                    const padding = isReel ? 75 * (w / 1080) : imgW * 0.03;
-                    const boundX = isReel ? 0 : imgX;
-                    const boundY = isReel ? 0 : imgY;
-                    const boundW = isReel ? w : imgW;
+                    const padding = isReel ? 75 * (w / 1080) : cardMargin;
+                    const boundX = 0;
+                    const boundY = 0;
+                    const boundW = w;
 
                     let qx, qy;
                     switch (qrPosition) {
@@ -537,7 +538,7 @@
                     ctx.restore();
                 }
 
-                // 5. Custom Logo Overlay
+                // 5. Bigger Custom Logo Overlay
                 if (logoObj) {
                     const logoMaxW = refW * 0.28; 
                     const logoMaxH = refW * 0.10; 
@@ -548,15 +549,9 @@
                     logoW = logoW * scale;
                     logoH = logoH * scale;
 
-                    let logoX, logoY;
-                    if (isReel) {
-                        const pad = 75 * (w / 1080);
-                        logoX = logoPosition === 'top-left' ? pad : w - logoW - pad;
-                        logoY = pad;
-                    } else {
-                        logoX = logoPosition === 'top-left' ? imgX + cardMargin + paddingX : imgX + imgW - logoW - cardMargin - paddingX;
-                        logoY = imgY + cardMargin + refW * 0.01; 
-                    }
+                    const pad = isReel ? 75 * (w / 1080) : cardMargin;
+                    let logoX = logoPosition === 'top-left' ? pad : w - logoW - pad;
+                    let logoY = pad;
 
                     ctx.save();
                     ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.25)';
@@ -568,7 +563,7 @@
                 // 6. Seating Plan Overlay
                 if (seatingPlanObj) {
                     const spMaxW = refW * 0.22; 
-                    const spMaxH = (isReel ? h : imgH) * 0.16; 
+                    const spMaxH = h * 0.16; 
                     
                     let spW = seatingPlanObj.width;
                     let spH = seatingPlanObj.height;
@@ -576,15 +571,9 @@
                     spW = spW * spScale;
                     spH = spH * spScale;
 
-                    let spX, spY;
-                    if (isReel) {
-                        const pad = 75 * (w / 1080);
-                        spX = w - spW - pad;
-                        spY = cardY - spH - refW * 0.015;
-                    } else {
-                        spX = imgX + imgW - spW - cardMargin - paddingX;
-                        spY = cardY - spH - refW * 0.015; 
-                    }
+                    const pad = isReel ? 75 * (w / 1080) : cardMargin;
+                    let spX = w - spW - pad;
+                    let spY = cardY - spH - refW * 0.015;
 
                     ctx.save();
                     const spPadding = refW * 0.006;
@@ -634,10 +623,10 @@
                     let sy = Math.max(0, Math.min(py - (sHeight / 2), mHeight - sHeight));
 
                     let dx, dy;
-                    const padding = isReel ? 75 * (w / 1080) : imgW * 0.03;
-                    const boundX = isReel ? 0 : imgX;
-                    const boundY = isReel ? 0 : imgY;
-                    const boundW = isReel ? w : imgW;
+                    const padding = isReel ? 75 * (w / 1080) : cardMargin;
+                    const boundX = 0;
+                    const boundY = 0;
+                    const boundW = w;
                     
                     switch (zoomPosition) {
                         case 'top-left': dx = boundX + padding; dy = boundY + padding; break;
@@ -811,7 +800,7 @@
                     const canvasStream = canvas.captureStream(30);
                     const tracks = [...canvasStream.getVideoTracks()];
 
-                    // 3. Extract Audio Track directly from video if available (No Web Audio API context errors)
+                    // 3. Extract Audio Track directly from video if available
                     let videoAudioStream = null;
                     if (imageObj.captureStream) {
                         videoAudioStream = imageObj.captureStream();
@@ -1312,7 +1301,7 @@
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(<App/>);
     </script>
 </body>
 </html>
