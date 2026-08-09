@@ -762,7 +762,7 @@
                 setTimeout(() => setCopied(false), 2000);
             };
 
-            // REFACTORED & FIXED VIDEO DOWNLOAD ENGINE
+            // REFACTORED VIDEO DOWNLOAD ENGINE FOR MP4 OUTPUT
             const downloadMedia = async () => {
                 if (!canvasRef.current || !imageObj) return;
 
@@ -817,20 +817,23 @@
 
                     const combinedStream = new MediaStream(tracks);
 
-                    // 4. Select Robust Supported MIME Type
+                    // 4. Select MP4 MIME Type (With WebM fallback for un-supported browsers)
                     const types = [
+                        'video/mp4;codecs=avc1,mp4a.40.2',
+                        'video/mp4;codecs=avc1',
+                        'video/mp4;codecs=h264',
+                        'video/mp4',
                         'video/webm;codecs=vp9,opus',
                         'video/webm;codecs=vp8,opus',
-                        'video/webm',
-                        'video/mp4'
+                        'video/webm'
                     ];
 
                     let selectedMime = '';
-                    let fileExt = 'webm';
+                    let fileExt = 'mp4';
                     for (const t of types) {
                         if (MediaRecorder.isTypeSupported(t)) {
                             selectedMime = t;
-                            if (t.includes('mp4')) fileExt = 'mp4';
+                            fileExt = t.includes('mp4') ? 'mp4' : 'webm';
                             break;
                         }
                     }
@@ -856,7 +859,7 @@
                             return;
                         }
 
-                        const blob = new Blob(chunks, { type: selectedMime || 'video/webm' });
+                        const blob = new Blob(chunks, { type: selectedMime || 'video/mp4' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
