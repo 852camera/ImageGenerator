@@ -121,12 +121,11 @@
             const [showSafeZone, setShowSafeZone] = useState(false);
             
             // Customization Options
-            const [outputSize, setOutputSize] = useState('ig');
-            const [backgroundStyle, setBackgroundStyle] = useState('blur'); // 'blur', 'dark', 'white'
+            const [outputSize, setOutputSize] = useState('ig-reel');
+            const [backgroundStyle, setBackgroundStyle] = useState('blur'); // 'blur', 'dark', 'white', 'transparent'
             const [fontFamily, setFontFamily] = useState("'Noto Sans TC', sans-serif");
             const [fontScale, setFontScale] = useState(1);
             const [logoPosition, setLogoPosition] = useState('top-right');
-            const barColorStart = '#102e5a'; // Symphonic Blue
             
             // Sharpness Zoom States
             const [enableZoom, setEnableZoom] = useState(false);
@@ -151,7 +150,6 @@
             const [optionalText, setOptionalText] = useState('');
 
             const canvasRef = useRef(null);
-            const animationRef = useRef(null);
 
             // Load default logo on init
             useEffect(() => {
@@ -261,15 +259,15 @@
             };
 
             const handleCanvasClick = (e) => {
-                if (!canvasRef.current || !imageObj || !enableZoom) return;
+                if (!canvasRef.current || !enableZoom) return;
 
                 const canvas = canvasRef.current;
                 const rect = canvas.getBoundingClientRect();
                 const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
                 const clickY = (e.clientY - rect.top) * (canvas.height / rect.height);
 
-                const mWidth = imageObj.videoWidth || imageObj.width;
-                const mHeight = imageObj.videoHeight || imageObj.height;
+                const mWidth = imageObj ? (imageObj.videoWidth || imageObj.width) : 1080;
+                const mHeight = imageObj ? (imageObj.videoHeight || imageObj.height) : 1920;
 
                 let imgX = 0, imgY = 0, imgW = canvas.width, imgH = canvas.height;
 
@@ -295,18 +293,13 @@
                 return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
             };
 
-            // Master Canvas Render Engine
-            const renderCanvas = useCallback(() => {
-                if (!imageObj || !canvasRef.current) return;
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext('2d');
+            // Master Canvas Render Engine with Flexible Target Canvas & Force Transparent Option
+            const renderCanvasToTarget = useCallback((targetCanvas, forceTransparent = false) => {
+                if (!targetCanvas) return;
+                const ctx = targetCanvas.getContext('2d');
                 
-                const mWidth = imageObj.videoWidth || imageObj.width;
-                const mHeight = imageObj.videoHeight || imageObj.height;
-                if (!mWidth || !mHeight) return;
-
-                let w, h;
-                let imgX = 0, imgY = 0, imgW, imgH;
+                let mWidth = imageObj ? (imageObj.videoWidth || imageObj.width) : 1080;
+                let mHeight = imageObj ? (imageObj.videoHeight || imageObj.height) : 1920;
 
                 // 1. Calculate Canvas Aspect Ratio
                 if (outputSize === 'ig') {
@@ -315,68 +308,73 @@
                     let cw = imgRatio > targetRatio ? mWidth : mHeight * targetRatio;
                     let ch = imgRatio > targetRatio ? mWidth / targetRatio : mHeight;
 
-                    canvas.width = Math.max(1080, Math.round(cw));
-                    canvas.height = Math.max(1350, Math.round(ch));
+                    targetCanvas.width = Math.max(1080, Math.round(cw));
+                    targetCanvas.height = Math.max(1350, Math.round(ch));
                 } else if (outputSize === 'ig-reel') {
                     const targetRatio = 9 / 16;
                     const imgRatio = mWidth / mHeight;
                     let cw = imgRatio > targetRatio ? mWidth : mHeight * targetRatio;
                     let ch = imgRatio > targetRatio ? mWidth / targetRatio : mHeight;
 
-                    canvas.width = Math.max(1080, Math.round(cw));
-                    canvas.height = Math.max(1920, Math.round(ch));
+                    targetCanvas.width = Math.max(1080, Math.round(cw));
+                    targetCanvas.height = Math.max(1920, Math.round(ch));
                 } else {
-                    canvas.width = mWidth;
-                    canvas.height = mHeight;
+                    targetCanvas.width = mWidth;
+                    targetCanvas.height = mHeight;
                 }
 
-                w = canvas.width;
-                h = canvas.height;
+                const w = targetCanvas.width;
+                const h = targetCanvas.height;
 
                 ctx.save();
                 ctx.clearRect(0, 0, w, h);
 
-                // 2. Draw Natural Blending Canvas Background Fill
-                if (outputSize === 'ig' || outputSize === 'ig-reel') {
-                    if (backgroundStyle === 'blur') {
-                        ctx.save();
-                        ctx.filter = 'blur(45px) brightness(0.65)';
-                        const coverScale = Math.max(w / mWidth, h / mHeight);
-                        const bgW = mWidth * coverScale;
-                        const bgH = mHeight * coverScale;
-                        ctx.drawImage(imageObj, (w - bgW) / 2, (h - bgH) / 2, bgW, bgH);
-                        ctx.restore();
+                const isTransparent = forceTransparent || backgroundStyle === 'transparent';
 
-                        ctx.fillStyle = 'rgba(10, 14, 23, 0.25)';
-                        ctx.fillRect(0, 0, w, h);
-                    } else if (backgroundStyle === 'dark') {
-                        ctx.fillStyle = '#0B1323';
-                        ctx.fillRect(0, 0, w, h);
-                    } else {
-                        ctx.fillStyle = '#FFFFFF';
-                        ctx.fillRect(0, 0, w, h);
+                // 2. Draw Background Fill & Media if NOT Transparent
+                if (!isTransparent) {
+                    if (outputSize === 'ig' || outputSize === 'ig-reel') {
+                        if (backgroundStyle === 'blur' && imageObj) {
+                            ctx.save();
+                            ctx.filter = 'blur(45px) brightness(0.65)';
+                            const coverScale = Math.max(w / mWidth, h / mHeight);
+                            const bgW = mWidth * coverScale;
+                            const bgH = mHeight * coverScale;
+                            ctx.drawImage(imageObj, (w - bgW) / 2, (h - bgH) / 2, bgW, bgH);
+                            ctx.restore();
+
+                            ctx.fillStyle = 'rgba(10, 14, 23, 0.25)';
+                            ctx.fillRect(0, 0, w, h);
+                        } else if (backgroundStyle === 'dark') {
+                            ctx.fillStyle = '#0B1323';
+                            ctx.fillRect(0, 0, w, h);
+                        } else if (backgroundStyle === 'white') {
+                            ctx.fillStyle = '#FFFFFF';
+                            ctx.fillRect(0, 0, w, h);
+                        }
+
+                        if (imageObj) {
+                            const scaleFit = Math.min(w / mWidth, h / mHeight);
+                            const imgW = mWidth * scaleFit;
+                            const imgH = mHeight * scaleFit;
+                            const imgX = (w - imgW) / 2;
+                            const imgY = (h - imgH) / 2;
+                            
+                            ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.35)';
+                            ctx.shadowBlur = isRecording ? 0 : w * 0.02;
+                            ctx.shadowOffsetY = isRecording ? 0 : w * 0.006;
+                            ctx.drawImage(imageObj, imgX, imgY, imgW, imgH);
+                            ctx.shadowColor = 'transparent';
+                            ctx.shadowBlur = 0;
+                            ctx.shadowOffsetY = 0;
+                        }
+                    } else if (imageObj) {
+                        ctx.drawImage(imageObj, 0, 0, w, h);
                     }
-
-                    const scaleFit = Math.min(w / mWidth, h / mHeight);
-                    imgW = mWidth * scaleFit;
-                    imgH = mHeight * scaleFit;
-                    imgX = (w - imgW) / 2;
-                    imgY = (h - imgH) / 2;
-                    
-                    ctx.shadowColor = isRecording ? 'transparent' : 'rgba(0, 0, 0, 0.35)';
-                    ctx.shadowBlur = isRecording ? 0 : w * 0.02;
-                    ctx.shadowOffsetY = isRecording ? 0 : w * 0.006;
-                    ctx.drawImage(imageObj, imgX, imgY, imgW, imgH);
-                    ctx.shadowColor = 'transparent';
-                    ctx.shadowBlur = 0;
-                    ctx.shadowOffsetY = 0;
-                } else {
-                    imgW = w; imgH = h;
-                    ctx.drawImage(imageObj, 0, 0, w, h);
                 }
 
                 const isReel = outputSize === 'ig-reel';
-                const refW = w; // Unified to canvas frame width for 100% layout consistency
+                const refW = w; 
 
                 // 3. Overlay Box Settings (Symphonic Blue #102e5a)
                 const cardMargin = refW * 0.025;
@@ -609,7 +607,7 @@
                 }
 
                 // 7. Detail Loupe Zoom Overlay
-                if (enableZoom && mainImagePin) {
+                if (enableZoom && mainImagePin && imageObj) {
                     const insetSize = refW * zoomSize; 
                     const baseCropReference = refW * 0.25; 
                     
@@ -685,7 +683,7 @@
                 }
 
                 // 8. IG Reels Safe Zone Guidelines
-                if (showSafeZone && isReel && !isRecording) {
+                if (showSafeZone && isReel && !isRecording && !isTransparent) {
                     ctx.save();
                     ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
                     ctx.lineWidth = w * 0.003;
@@ -717,28 +715,51 @@
 
             }, [imageObj, logoObj, seatingPlanObj, pinPosition, mainImagePin, enableZoom, zoomLevel, zoomSize, zoomPosition, camera, lens, venue, seating, optionalText, outputSize, backgroundStyle, fontFamily, fontScale, logoPosition, enableQr, qrUrl, qrText, qrPosition, qrSize, qrObj, isRecording, showSafeZone]);
 
+            const renderCanvas = useCallback(() => {
+                if (!canvasRef.current) return;
+                renderCanvasToTarget(canvasRef.current, false);
+            }, [renderCanvasToTarget]);
+
             useEffect(() => {
                 document.fonts.ready.then(() => renderCanvas());
             }, [fontFamily, renderCanvas]);
 
+            // High-precision sync rendering loop aligned directly with video frame rate ticks
             useEffect(() => {
-                if (!imageObj) return;
-                let intervalId;
+                if (!imageObj) {
+                    renderCanvas();
+                    return;
+                }
 
                 if (mediaType === 'video') {
-                    const loop = () => {
+                    let callbackId = null;
+                    let animationFrameId = null;
+                    let isSubscribed = true;
+
+                    const renderFrame = () => {
+                        if (!isSubscribed) return;
                         renderCanvas();
-                        animationRef.current = requestAnimationFrame(loop);
+                        if ('requestVideoFrameCallback' in imageObj) {
+                            callbackId = imageObj.requestVideoFrameCallback(renderFrame);
+                        } else {
+                            animationFrameId = requestAnimationFrame(renderFrame);
+                        }
                     };
-                    animationRef.current = requestAnimationFrame(loop);
-                    
-                    intervalId = setInterval(() => {
-                        if (document.hidden) renderCanvas();
-                    }, 1000 / 30);
+
+                    if ('requestVideoFrameCallback' in imageObj) {
+                        callbackId = imageObj.requestVideoFrameCallback(renderFrame);
+                    } else {
+                        animationFrameId = requestAnimationFrame(renderFrame);
+                    }
 
                     return () => {
-                        cancelAnimationFrame(animationRef.current);
-                        clearInterval(intervalId);
+                        isSubscribed = false;
+                        if ('cancelVideoFrameCallback' in imageObj && callbackId !== null) {
+                            imageObj.cancelVideoFrameCallback(callbackId);
+                        }
+                        if (animationFrameId !== null) {
+                            cancelAnimationFrame(animationFrameId);
+                        }
                     };
                 } else {
                     renderCanvas();
@@ -762,7 +783,20 @@
                 setTimeout(() => setCopied(false), 2000);
             };
 
-            // REFACTORED & FIXED VIDEO DOWNLOAD ENGINE
+            // Download Pure Transparent PNG Overlay Engine
+            const downloadTransparentOverlay = () => {
+                const tempCanvas = document.createElement('canvas');
+                renderCanvasToTarget(tempCanvas, true); // forceTransparent = true
+
+                const dataUrl = tempCanvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                const aspectTag = outputSize === 'ig-reel' ? '9x16_reel' : outputSize === 'ig' ? '4x5_post' : 'original';
+                link.download = `watermark_overlay_${aspectTag}.png`;
+                link.href = dataUrl;
+                link.click();
+            };
+
+            // High FPS Media Recording Engine
             const downloadMedia = async () => {
                 if (!canvasRef.current || !imageObj) return;
 
@@ -786,7 +820,7 @@
                     imageObj.pause();
                     imageObj.currentTime = 0;
                     
-                    // Wait for seeked event to ensure frame 0 is rendered
+                    // Wait for seeked event to ensure frame 0 is ready
                     await new Promise(resolve => {
                         const onSeeked = () => {
                             imageObj.removeEventListener('seeked', onSeeked);
@@ -796,8 +830,10 @@
                         setTimeout(resolve, 300); // Fallback
                     });
 
-                    // 2. Capture Video Stream from Canvas
-                    const canvasStream = canvas.captureStream(30);
+                    renderCanvas();
+
+                    // 2. Capture Canvas Stream locked at 60 FPS maximum capability
+                    const canvasStream = canvas.captureStream(60);
                     const tracks = [...canvasStream.getVideoTracks()];
 
                     // 3. Extract Audio Track directly from video if available
@@ -817,7 +853,7 @@
 
                     const combinedStream = new MediaStream(tracks);
 
-                    // 4. Select Robust Supported MIME Type
+                    // 4. Select Robust High Bitrate Supported MIME Type
                     const types = [
                         'video/webm;codecs=vp9,opus',
                         'video/webm;codecs=vp8,opus',
@@ -836,8 +872,8 @@
                     }
 
                     const totalPixels = canvas.width * canvas.height;
-                    const dynamicBitrate = Math.round((totalPixels / 2073600) * 12000000); 
-                    const safeBitrate = Math.min(Math.max(dynamicBitrate, 8000000), 80000000);
+                    const dynamicBitrate = Math.round((totalPixels / 2073600) * 18000000); 
+                    const safeBitrate = Math.min(Math.max(dynamicBitrate, 12000000), 100000000);
 
                     const recorderOptions = selectedMime ? { mimeType: selectedMime, videoBitsPerSecond: safeBitrate } : { videoBitsPerSecond: safeBitrate };
                     const recorder = new MediaRecorder(combinedStream, recorderOptions);
@@ -871,7 +907,7 @@
                         imageObj.play().catch(() => {});
                     };
 
-                    // 5. Unmute and Start Recording with 100ms time slice
+                    // 5. Unmute and Start Recording smoothly
                     imageObj.muted = false;
                     imageObj.loop = false;
                     recorder.start(100);
@@ -899,7 +935,7 @@
                         if (imageObj.ended || (duration > 0 && imageObj.currentTime >= duration)) {
                             stopRecording();
                         }
-                    }, 100);
+                    }, 50);
 
                     try {
                         await imageObj.play();
@@ -924,15 +960,27 @@
                             </div>
                         </div>
 
-                        <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-3">
                             {outputSize === 'ig-reel' && (
                                 <button 
                                     onClick={() => setShowSafeZone(!showSafeZone)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${showSafeZone ? 'bg-red-500/20 border-red-500/50 text-red-300' : 'bg-studio-card border-white/10 text-gray-400 hover:text-white'}`}
+                                    className={`px-3 py-2 rounded-lg text-xs font-semibold transition border ${showSafeZone ? 'bg-red-500/20 border-red-500/50 text-red-300' : 'bg-studio-card border-white/10 text-gray-400 hover:text-white'}`}
                                 >
                                     {showSafeZone ? '隱藏安全區' : 'IG Reels 安全區'}
                                 </button>
                             )}
+
+                            {/* Transparent PNG Overlay Download Button */}
+                            <button 
+                                onClick={downloadTransparentOverlay}
+                                className="px-4 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 cursor-pointer"
+                                title="下載適用於 Premiere / CapCut / Final Cut 的透明浮水印 Overlay 圖片"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                <span>下載透明 Overlay (.PNG)</span>
+                            </button>
+
+                            {/* Combined Media Download Button */}
                             <button 
                                 onClick={downloadMedia}
                                 disabled={!imageObj || isRecording}
@@ -962,7 +1010,7 @@
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-400 mb-2">上載相片 / 影片</label>
+                                        <label className="block text-xs font-medium text-gray-400 mb-2">上載相片 / 影片 (選填)</label>
                                         <input 
                                             type="file" 
                                             accept="image/*,video/*" 
@@ -979,8 +1027,8 @@
                                                 onChange={(e) => setOutputSize(e.target.value)}
                                                 className="w-full text-xs studio-input rounded-lg px-3 py-2 text-gray-200 outline-none"
                                             >
-                                                <option value="ig">IG 貼文 (4:5 比例)</option>
                                                 <option value="ig-reel">IG Reels (9:16 全螢幕)</option>
+                                                <option value="ig">IG 貼文 (4:5 比例)</option>
                                                 <option value="original">原始相片比例</option>
                                             </select>
                                         </div>
@@ -991,7 +1039,8 @@
                                                 onChange={(e) => setBackgroundStyle(e.target.value)}
                                                 className="w-full text-xs studio-input rounded-lg px-3 py-2 text-gray-200 outline-none"
                                             >
-                                                <option value="blur">模糊相片背景 (推薦)</option>
+                                                <option value="blur">模糊相片背景</option>
+                                                <option value="transparent">透明 PNG Overlay (推薦剪片)</option>
                                                 <option value="dark">深藍夜色</option>
                                                 <option value="white">純白留白</option>
                                             </select>
@@ -1277,13 +1326,13 @@
 
                         {/* Right Live Viewport */}
                         <div className="flex-1 canvas-viewport flex flex-col items-center justify-center p-6 relative overflow-hidden">
-                            {!imageObj && (
-                                <div className="text-center space-y-2 max-w-sm">
+                            {!imageObj && backgroundStyle !== 'transparent' && (
+                                <div className="text-center space-y-2 max-w-sm mb-4">
                                     <div className="w-12 h-12 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-gray-400">
                                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                                     </div>
-                                    <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">尚未載入媒體</h3>
-                                    <p className="text-[11px] text-gray-500">請從左側選單上載相片或影片以開始合成水印。</p>
+                                    <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">尚未載入媒體 (可直接導出 Overlay)</h3>
+                                    <p className="text-[11px] text-gray-500">你可以直接點擊上方「下載透明 Overlay (.PNG)」導出透明浮水印。</p>
                                 </div>
                             )}
 
@@ -1291,7 +1340,6 @@
                                 ref={canvasRef} 
                                 onClick={handleCanvasClick}
                                 className={`max-w-full max-h-[82vh] object-contain rounded-lg shadow-2xl transition-all duration-200 outline-none ${enableZoom ? 'cursor-crosshair' : 'cursor-default'}`}
-                                style={{ display: imageObj ? 'block' : 'none' }}
                             />
                         </div>
 
