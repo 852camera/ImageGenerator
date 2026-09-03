@@ -770,10 +770,16 @@
             const getGeneratedCaption = () => {
                 const equipmentText = camera && lens ? `${camera} + ${lens}` : (camera || lens || '');
                 const locationText = [venue, seating].filter(Boolean).join(' | ');
+                const hashtags = '#租相機 #租鏡頭 #相機出租 #鏡頭出租 #演唱會 #追星鏡頭 #追星相機 #相機租借';
+
                 let caption = `【 ${eventName || '活動名稱'} 】\n\n拍攝器材：${equipmentText}\n拍攝位置：${locationText}`;
+
                 if (enableQr && qrUrl) {
                     caption += `\n\n租借同款機鏡：${qrUrl}`;
                 }
+
+                caption += `\n\n${hashtags}`;
+
                 return caption;
             };
 
